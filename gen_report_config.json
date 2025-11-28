@@ -1,0 +1,12 @@
+{
+    "mode": "dataset",
+    "workdir": "./data/workdir",
+    "output_dir": "./data/dataset",
+    "specifics": [],
+    "skips": [],
+    "raw_dataset_files": [
+        "./data/raw_datasets/catchorg__Catch2/zeromicro__go-zero_raw_dataset_1.jsonl"
+    ],
+    "log_dir": "./data/logs",
+    "log_level": "DEBUG"
+}

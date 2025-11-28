@@ -38,6 +38,7 @@ class GitHubScraper:
         output_format: str = "console",
         token: Optional[str] = None,
         output_dir: str = ".",
+        created:str = "2025-11-20",
     ) -> None:
         """
         Fetch GitHub repositories sorted by stars
@@ -67,7 +68,7 @@ class GitHubScraper:
                         url=url,
                         headers=headers,
                         params={
-                            "q": f"language:{language} stars:>={min_stars}",
+                            "q": f"language:{language} stars:>={min_stars} created:>={created}",
                             "sort": "stars",
                             "order": "desc",
                             "per_page": min(100, remaining_results),
@@ -206,7 +207,7 @@ def main() -> None:
         description="Fetch GitHub repositories sorted by stars"
     )
     parser.add_argument(
-        "--language", required=True, type=str, help="Programming language to search"
+        "--language", required=False, type=str, help="Programming language to search"
     )
     parser.add_argument(
         "--min_stars", type=int, default=0, help="Minimum star count (default: 0)"
@@ -235,6 +236,12 @@ def main() -> None:
         type=str,
         default=".",
         help="Directory to save CSV files (will be created if doesn't exist)",
+    ) 
+    parser.add_argument(
+        "--created",
+        type=str,
+        default="2024-11-28",
+        help="Minimum creation date (default: 2024-11-28)",
     )
 
     args = parser.parse_args()
@@ -248,6 +255,7 @@ def main() -> None:
         output_format=args.output,
         token=token,
         output_dir=args.output_dir,
+        created=args.created,
     )
 
 

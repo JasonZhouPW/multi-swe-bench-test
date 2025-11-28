@@ -37,8 +37,8 @@ def get_parser() -> argparse.ArgumentParser:
         default=None,
         help="API token(s) or path to token file.",
     )
-    parser.add_argument("--org", type=str, required=True, help="Organization name.")
-    parser.add_argument("--repo", type=str, required=True, help="Repository name.")
+    parser.add_argument("--org", type=str, required=False, help="Organization name.")
+    parser.add_argument("--repo", type=str, required=False, help="Repository name.")
     parser.add_argument(
         "--delay-on-error",
         type=optional_int,
@@ -69,28 +69,50 @@ def run_pipeline(
     delay_on_error: int = 300,
     retry_attempts: int = 3,
     skip_commit_message: bool = False,
+    key_words: str = None,
 ) -> None:
-    # step 1: get all pull requests
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    print("\n=== Step 1: Fetch all PRs ===")
     get_all_prs(tokens, out_dir, org, repo)
 
-    # step 2: filter to obtain required pull requests
-    # - closed
-    # - resolve some issues
+    # Step 1.5: 根据 key_words 筛选并覆盖原始 PR 文件
     pull_file = out_dir / f"{org}__{repo}_prs.jsonl"
+
+    if key_words:
+        print(f"\n=== Step 1.5: Filter PRs by keyword: '{key_words}' (overwrite original file) ===")
+        key_lower = key_words.lower()
+        # 读取原始文件
+        with open(pull_file, "r", encoding="utf-8") as fin:
+            lines = [line for line in fin if key_lower in line.lower()]
+        
+        # 覆盖写回原始文件
+        with open(pull_file, "w", encoding="utf-8") as fout:
+            fout.writelines(lines)
+
+        print(f"Keyword filtered PRs overwritten to original file: {pull_file}")    
+
+
+    print("\n=== Step 2: Filter PRs ===")
+    pull_file = out_dir / f"{org}__{repo}_prs.jsonl"
+    print("Pull file:", pull_file)
     filter_prs(tokens, out_dir, pull_file, skip_commit_message)
 
-    # step 3: get related issues
-    pull_file = out_dir / f"{org}__{repo}_filtered_prs.jsonl"
-    get_related_issues(tokens, out_dir, pull_file)
+    print("\n=== Step 3: Fetch related issues ===")
+    filtered_file = out_dir / f"{org}__{repo}_filtered_prs.jsonl"
+    print("Filtered file:", filtered_file)
+    get_related_issues(tokens, out_dir, filtered_file)
 
-    # step 4: merged filtered pull requests and related issues
+    print("\n=== Step 4: Merge PRs + Issues ===")
     merge_prs_with_issues(out_dir, org, repo)
 
-    # step 5: build a complete dataset
-    # - download patch
-    # - split patch as fix_patch and test_patch
+    print("\n=== Step 5: Build Dataset ===")
     dataset_file = out_dir / f"{org}__{repo}_filtered_prs_with_issues.jsonl"
+    print("Dataset file:", dataset_file)
     build_dataset(tokens, out_dir, dataset_file, delay_on_error, retry_attempts)
+
+    print("\n=== Pipeline Completed Successfully ===")
 
 
 if __name__ == "__main__":

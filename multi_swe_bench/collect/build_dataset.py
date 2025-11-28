@@ -183,7 +183,12 @@ def main(
     except FileNotFoundError:
         raw_dataset = {}
 
-    failed_number = max([pr["number"] for pr in filtered_prs_with_issues])
+    if not filtered_prs_with_issues:
+        print("No PRs passed filtering, skipping max()")
+        failed_number = None
+    else:
+        failed_number = max(pr["number"] for pr in filtered_prs_with_issues)
+        #failed_number = max([pr["number"] for pr in filtered_prs_with_issues])
 
     log_file = out_dir / f"{org}__{repo}_raw_dataset.log"
     last_failed_number = get_failed_number(log_file)

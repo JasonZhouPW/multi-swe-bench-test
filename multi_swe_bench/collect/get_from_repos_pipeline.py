@@ -32,6 +32,7 @@ def process_repository(
     delay_on_error: Union[int, None],
     retry_attempts: int,
     skip_commit_message: bool,
+    key_words: str,
 ) -> bool:
     """Process a single repository using the get_pipeline logic directly"""
     dir_name = f"{org}__{repo}".replace("/", "__")
@@ -48,6 +49,7 @@ def process_repository(
             delay_on_error=delay_on_error,
             retry_attempts=retry_attempts,
             skip_commit_message=skip_commit_message,
+            key_words=key_words,
         )
         print(f"✅ Success: {org}/{repo}")
         return True
@@ -137,6 +139,7 @@ def process_token_group(
     delay_on_error: Union[int, None],
     retry_attempts: int,
     skip_commit_message: bool,
+    key_words: str,
 ) -> List[bool]:
     """Process repos of a token group"""
     results: List[bool] = []
@@ -150,6 +153,7 @@ def process_token_group(
                 delay_on_error,
                 retry_attempts,
                 skip_commit_message,
+                key_words,
             )
         )
     return results
@@ -203,6 +207,12 @@ def main() -> None:
         default=False,
         help="Skip commit message.",
     )
+    parser.add_argument(
+        "--key_words",
+        type=str,
+        default=None,
+        help="Keywords to filter repositories.",
+    )
     args = parser.parse_args()
 
     try:
@@ -236,6 +246,7 @@ def main() -> None:
                         args.delay_on_error,
                         args.retry_attempts,
                         args.skip_commit_message,
+                        args.key_words,
                     )
                 )
 

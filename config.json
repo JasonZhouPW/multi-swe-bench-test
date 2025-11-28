@@ -1,0 +1,21 @@
+{
+    "mode": "dataset",
+    "workdir": "./data/workdir",
+    "raw_dataset_files": [
+        "./data/raw_datasets/catchorg__Catch2/zeromicro__go-zero_raw_dataset_1.jsonl"
+    ],
+    "force_build": false,
+    "output_dir": "./data/dataset",
+    "specifics": [],
+    "skips": [],
+    "repo_dir": "./data/repos",
+    "need_clone": false,
+    "global_env": [],
+    "clear_env": true,
+    "stop_on_error": true,
+    "max_workers": 2,
+    "max_workers_build_image": 8,
+    "max_workers_run_instance": 8,
+    "log_dir": "./data/logs",
+    "log_level": "DEBUG"
+}

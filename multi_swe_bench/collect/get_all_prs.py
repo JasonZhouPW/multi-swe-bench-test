@@ -38,8 +38,8 @@ def get_parser() -> argparse.ArgumentParser:
         default=None,
         help="API token(s) or path to token file.",
     )
-    parser.add_argument("--org", type=str, required=True, help="Organization name.")
-    parser.add_argument("--repo", type=str, required=True, help="Repository name.")
+    parser.add_argument("--org", type=str, required=False, help="Organization name.")
+    parser.add_argument("--repo", type=str, required=False, help="Repository name.")
 
     return parser
 

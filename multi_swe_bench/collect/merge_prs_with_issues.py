@@ -26,8 +26,8 @@ def get_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--out_dir", type=Path, required=True, help="Output directory path."
     )
-    parser.add_argument("--org", type=str, required=True, help="Organization name.")
-    parser.add_argument("--repo", type=str, required=True, help="Repository name.")
+    parser.add_argument("--org", type=str, required=False, help="Organization name.")
+    parser.add_argument("--repo", type=str, required=False, help="Repository name.")
 
     return parser
 
