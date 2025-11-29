@@ -396,7 +396,16 @@ class CliArgs:
                         if line.strip() == "":
                             continue
 
-                        pr = PullRequest.from_json(line)
+                        try:
+                            pr = PullRequest.from_json(line)
+                        except Exception as e:
+                            print("\n===== ERROR WHILE PARSING RAW DATASET =====")
+                            print(f"File: {file_path}")
+                            print(f"Content: {line}")
+                            print(f"Exception: {e}")
+                            print("=========================================\n")
+                            raise  # 让原来的异常继续抛出
+                        #pr = PullRequest.from_json(line)
                         self._raw_dataset[pr.id] = pr
 
             self.logger.info(
