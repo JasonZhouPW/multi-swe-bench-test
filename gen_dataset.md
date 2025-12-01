@@ -1,5 +1,7 @@
 ## 生成数据集
 
+```bash
+
 #!/bin/bash
 set -e  # 一旦有命令出错就退出
 
@@ -48,4 +50,5 @@ python3 -m multi_swe_bench.collect.get_from_repos_pipeline \
     --token "$TOKEN"
 
 echo "All done!"
+
 ```
