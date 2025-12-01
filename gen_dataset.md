@@ -17,7 +17,7 @@ MAX_WORKERS=50
 DISTRIBUTE="round"
 DELAY_ON_ERROR=600
 RETRY_ATTEMPTS=8
-CREATED="2024-11-28"
+CREATED_AT="2024-11-28"
 KEY_WORDS="refactor"
 
 # 第一步：爬取 GitHub 仓库
@@ -28,7 +28,6 @@ python3 -m multi_swe_bench.collect.crawl_repos \
     --language "$LANGUAGE" \
     --min_stars "$MIN_STARS" \
     --max_results "$MAX_RESULTS" \
-    --created "$CREATED" \
     --token "$TOKEN"
 
 # 找到刚生成的 CSV 文件
@@ -47,6 +46,7 @@ python3 -m multi_swe_bench.collect.get_from_repos_pipeline \
     --delay-on-error "$DELAY_ON_ERROR" \
     --retry-attempts "$RETRY_ATTEMPTS" \
     --key_words "$KEY_WORDS" \
+    --created_at "$CREATED_AT" \
     --token "$TOKEN"
 
 echo "All done!"

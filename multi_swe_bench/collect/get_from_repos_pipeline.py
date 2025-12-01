@@ -33,6 +33,7 @@ def process_repository(
     retry_attempts: int,
     skip_commit_message: bool,
     key_words: str,
+    created_at: str,
 ) -> bool:
     """Process a single repository using the get_pipeline logic directly"""
     dir_name = f"{org}__{repo}".replace("/", "__")
@@ -50,6 +51,7 @@ def process_repository(
             retry_attempts=retry_attempts,
             skip_commit_message=skip_commit_message,
             key_words=key_words,
+            created_at=created_at,
         )
         print(f"✅ Success: {org}/{repo}")
         return True
@@ -140,6 +142,7 @@ def process_token_group(
     retry_attempts: int,
     skip_commit_message: bool,
     key_words: str,
+    created_at: str,
 ) -> List[bool]:
     """Process repos of a token group"""
     results: List[bool] = []
@@ -154,6 +157,7 @@ def process_token_group(
                 retry_attempts,
                 skip_commit_message,
                 key_words,
+                created_at,
             )
         )
     return results
@@ -213,6 +217,12 @@ def main() -> None:
         default=None,
         help="Keywords to filter repositories.",
     )
+    parser.add_argument(
+        "--created_at",
+        type=str,
+        default="2024-11-28",
+        help="Minimum creation date (default: 2024-11-28)",
+    )
     args = parser.parse_args()
 
     try:
@@ -247,6 +257,7 @@ def main() -> None:
                         args.retry_attempts,
                         args.skip_commit_message,
                         args.key_words,
+                        args.created_at,
                     )
                 )
 

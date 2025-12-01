@@ -15,7 +15,7 @@
 import argparse
 import json
 import random
-from datetime import datetime
+from datetime import datetime,timezone
 from pathlib import Path
 
 from github import Auth, Github
@@ -49,12 +49,27 @@ def get_github(token) -> Github:
     return Github(auth=auth, per_page=100)
 
 
-def main(tokens: list[str], out_dir: Path, org: str, repo: str):
+def main(tokens: list[str], out_dir: Path, org: str, repo: str, created_at: str = None):
     print("starting get all pull requests")
     print(f"Output directory: {out_dir}")
     print(f"Tokens: {tokens}")
     print(f"Org: {org}")
     print(f"Repo: {repo}")
+    print(f"Created At: {created_at}")
+
+    # Convert created_at string -> timezone-aware datetime
+    filter_dt = None
+    if created_at:
+        try:
+        # 支持 GitHub 风格：xxxx-xx-xxTxx:xx:xxZ
+            created_at_clean = created_at.replace("Z", "+00:00")
+            dt = datetime.fromisoformat(created_at_clean)
+        except ValueError:
+            raise ValueError(f"Invalid created_at format: {created_at}")
+        # 如果用户输入的是没有时区的日期，补成 UTC
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        filter_dt = dt
 
     g = get_github(random.choice(tokens))
     r = g.get_repo(f"{org}/{repo}")
@@ -66,6 +81,13 @@ def main(tokens: list[str], out_dir: Path, org: str, repo: str):
 
     with open(out_dir / f"{org}__{repo}_prs.jsonl", "w", encoding="utf-8") as file:
         for pull in tqdm(r.get_pulls("all"), desc="Pull Requests"):
+
+            # -------------------------------
+            # ⭐ 关键过滤逻辑：只保留 created_at > filter_dt 的 PR
+            # -------------------------------
+            if filter_dt and pull.created_at <= filter_dt:
+                continue
+
             file.write(
                 json.dumps(
                     {

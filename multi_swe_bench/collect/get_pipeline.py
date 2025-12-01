@@ -70,12 +70,13 @@ def run_pipeline(
     retry_attempts: int = 3,
     skip_commit_message: bool = False,
     key_words: str = None,
+    created_at: str = None,
 ) -> None:
 
     out_dir.mkdir(parents=True, exist_ok=True)
 
     print("\n=== Step 1: Fetch all PRs ===")
-    get_all_prs(tokens, out_dir, org, repo)
+    get_all_prs(tokens, out_dir, org, repo,created_at)
 
     # Step 1.5: 根据 key_words 筛选并覆盖原始 PR 文件
     pull_file = out_dir / f"{org}__{repo}_prs.jsonl"

@@ -68,7 +68,7 @@ class GitHubScraper:
                         url=url,
                         headers=headers,
                         params={
-                            "q": f"language:{language} stars:>={min_stars} created:>={created}",
+                            "q": f"language:{language} stars:>={min_stars}",
                             "sort": "stars",
                             "order": "desc",
                             "per_page": min(100, remaining_results),
