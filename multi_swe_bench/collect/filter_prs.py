@@ -127,7 +127,7 @@ def main(tokens: list[str], out_dir: Path, prs_file: Path, skip_commit_message: 
         prs = [json.loads(line) for line in in_file]
 
         for pull in tqdm(prs, desc="Pull Requests"):
-            if pull["state"] != "closed":
+            if pull["state"] != "closed" or pull["merged_at"] is None:
                 continue
 
             pull["commits"] = []
