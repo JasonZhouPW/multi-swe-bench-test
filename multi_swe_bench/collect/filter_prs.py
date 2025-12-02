@@ -52,39 +52,49 @@ def get_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def extract_resolved_issues(pull: dict) -> list[str]:
-    # Define 1. issue number regex pattern 2. comment regex pattern 3. keywords
-    issues_pat = re.compile(r"(\w+)\s+\#(\d+)")
-    comments_pat = re.compile(r"(?s)<!--.*?-->")
-    keywords = {
-        "close",
-        "closes",
-        "closed",
-        "fix",
-        "fixes",
-        "fixed",
-        "resolve",
-        "resolves",
-        "resolved",
+def extract_resolved_issues(pull: dict) -> list[int]:
+    """
+    判断 PR 是否解决/关联 issue。
+    - 如果 title/body/commit 包含 fix/close/resolve + #num → 返回 issue number
+    - 如果 title/body/labels 包含关键字（refactor/ref/...）但没有 #num → 返回 -1 作为占位
+    """
+
+    # 原有关键词（标准 fix/close/resolve）
+    issue_keywords = {
+        "close","closes","closed",
+        "fix","fixes","fixed",
+        "resolve","resolves","resolved"
     }
 
-    # Construct text to search over for issue numbers from PR body and commit messages
-    text = pull["title"] if pull["title"] else ""
-    text += "\n" + (pull["body"] if pull["body"] else "")
-    text += "\n" + "\n".join([commit["message"] for commit in pull["commits"]])
+    # 扩展关键词，用于 refactor 类型 PR
+    extra_keywords = {"refactor", "ref", "internal refactoring"}
 
-    # Remove comments from text
-    text = comments_pat.sub("", text)
-    # Look for issue numbers in text via scraping <keyword, number> patterns
+    # 组合所有关键词
+    all_keywords = issue_keywords.union(extra_keywords)
+
+    # 正则匹配 <keyword> #number
+    issues_pat = re.compile(r"(\w+)\s*\#(\d+)")
+
+    # 拼接文本来源
+    text = pull.get("title", "") + "\n" + pull.get("body", "")
+    text += "\n" + "\n".join(commit.get("message","") for commit in pull.get("commits",[]))
+
+    # 移除 HTML 注释
+    text = re.sub(r"(?s)<!--.*?-->", "", text)
+
+    # 先匹配标准 issue #num
     references = dict(issues_pat.findall(text))
     resolved_issues = set()
-    if references:
-        for word, issue_num in references.items():
-            if word.lower() in keywords:
-                resolved_issues.add(int(issue_num))
+    for word, issue_num in references.items():
+        if word.lower() in issue_keywords:
+            resolved_issues.add(int(issue_num))
 
-    if 0 in resolved_issues:
-        resolved_issues.remove(0)
+    # 如果没有标准 issue，但文本中包含 extra_keywords → 标记 -1
+    if not resolved_issues:
+        for kw in extra_keywords:
+            if kw.lower() in text.lower():
+                resolved_issues.add(-1)
+                break
 
     return list(resolved_issues)
 

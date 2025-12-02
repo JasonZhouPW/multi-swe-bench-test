@@ -85,10 +85,27 @@ def main(tokens, out_dir: Path, filtered_prs_file: Path):
 
     with open(filtered_prs_file, "r", encoding="utf-8") as file:
         filtered_prs = [json.loads(line) for line in file]
-        target_issues = set()
-        for pr in filtered_prs:
-            for issue in pr["resolved_issues"]:
-                target_issues.add(issue)
+
+    # --------------------------
+    # 分离真实 issue 与占位 issue
+    # --------------------------
+    target_issues = set()
+    placeholder_issues = []
+
+    for pr in filtered_prs:
+        for issue_number in pr["resolved_issues"]:
+            if issue_number == -1:
+                # 占位 issue
+                placeholder_issues.append({
+                    "org": org,
+                    "repo": repo,
+                    "number": -1,
+                    "state": "unknown",
+                    "title": pr.get("title", ""),
+                    "body": pr.get("body", "")
+                })
+            else:
+                target_issues.add(issue_number)
 
     g = get_github(random.choice(tokens))
     r = g.get_repo(f"{org}/{repo}")

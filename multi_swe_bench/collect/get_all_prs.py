@@ -15,6 +15,7 @@
 import argparse
 import json
 import random
+import re
 from datetime import datetime,timezone
 from pathlib import Path
 
@@ -48,14 +49,42 @@ def get_github(token) -> Github:
     auth = Auth.Token(token)
     return Github(auth=auth, per_page=100)
 
+def is_relevant_pull(pull, key_words: str = None) -> bool:
+    """
+    判断 PR 是否可能是修复 issue 的 PR。
+    """
 
-def main(tokens: list[str], out_dir: Path, org: str, repo: str, created_at: str = None):
+    title = pull.title.lower() if pull.title else ""
+    labels = [label.name.lower() for label in pull.labels]
+
+    # rule 1: title: fix #123
+    if re.search(r"fix\s*#\d+", title, re.IGNORECASE):
+        return True
+
+    # 默认关键词
+    default_keywords = {"refactor"}
+
+    # 用户指定 key_words（允许多个关键词用逗号分隔）
+    if key_words:
+        user_keywords = {w.strip().lower() for w in key_words.split(",")}
+        keywords = user_keywords
+    else:
+        keywords = default_keywords
+
+    # rule 2: labels contain keywords
+    if any(k in label for label in labels for k in keywords):
+        return True
+
+    return False
+
+def main(tokens: list[str], out_dir: Path, org: str, repo: str, created_at: str = None,key_words: str = None):
     print("starting get all pull requests")
     print(f"Output directory: {out_dir}")
     print(f"Tokens: {tokens}")
     print(f"Org: {org}")
     print(f"Repo: {repo}")
     print(f"Created At: {created_at}")
+    print(f"Key Words: {key_words}")
 
     # Convert created_at string -> timezone-aware datetime
     filter_dt = None
@@ -86,6 +115,11 @@ def main(tokens: list[str], out_dir: Path, org: str, repo: str, created_at: str 
             # ⭐ 关键过滤逻辑：只保留 created_at > filter_dt 的 PR
             # -------------------------------
             if filter_dt and pull.created_at <= filter_dt:
+                continue
+             # ⭐ 在这里做你要的过滤
+            if not is_relevant_pull(pull,key_words):
+                continue
+            if pull.number != 62351:
                 continue
 
             file.write(

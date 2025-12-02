@@ -76,25 +76,8 @@ def run_pipeline(
     out_dir.mkdir(parents=True, exist_ok=True)
 
     print("\n=== Step 1: Fetch all PRs ===")
-    get_all_prs(tokens, out_dir, org, repo,created_at)
-
-    # Step 1.5: 根据 key_words 筛选并覆盖原始 PR 文件
-    pull_file = out_dir / f"{org}__{repo}_prs.jsonl"
-
-    if key_words:
-        print(f"\n=== Step 1.5: Filter PRs by keyword: '{key_words}' (overwrite original file) ===")
-        key_lower = key_words.lower()
-        # 读取原始文件
-        with open(pull_file, "r", encoding="utf-8") as fin:
-            lines = [line for line in fin if key_lower in line.lower()]
-        
-        # 覆盖写回原始文件
-        with open(pull_file, "w", encoding="utf-8") as fout:
-            fout.writelines(lines)
-
-        print(f"Keyword filtered PRs overwritten to original file: {pull_file}")    
-
-
+    get_all_prs(tokens, out_dir, org, repo,created_at,key_words)
+ 
     print("\n=== Step 2: Filter PRs ===")
     pull_file = out_dir / f"{org}__{repo}_prs.jsonl"
     print("Pull file:", pull_file)
