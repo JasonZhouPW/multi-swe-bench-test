@@ -119,8 +119,6 @@ def main(tokens: list[str], out_dir: Path, org: str, repo: str, created_at: str 
              # ⭐ 在这里做你要的过滤
             if not is_relevant_pull(pull,key_words):
                 continue
-            if pull.number != 62351:
-                continue
 
             file.write(
                 json.dumps(
