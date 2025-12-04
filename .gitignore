@@ -182,11 +182,11 @@ token.txt
 tokens.txt
 
 # Custom ignore rules
-build*.sh
+#build*.sh
 *debug*
 exp_v1/
 eval_rl_go.sh
-gen*.sh
+#gen*.sh
 eval*.sh
 exp_v2
 scripts/images.dev6.txt
@@ -196,4 +196,4 @@ exp/
 data/
 .vscode/
 operator.sh
-#repos/
+repos/
