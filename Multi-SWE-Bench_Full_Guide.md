@@ -46,7 +46,7 @@ Step4: 构建 Dataset 并执行 Evaluation（run_full_pipeline.sh）
 说明：
 
 - Step2 与 Step3 可以并行执行（两者都只依赖 Step1）。
-- Step4 必须等待 Step2 与 Step3 完成，因为它需要 Docker 环境与 patch 文件共同参与评测。
+- Step4 必须等待 Step2 与 Step3 完成，因为它需要通过Docker环境生成的 dataset文件 与 patch 文件共同参与评测。
 
 ---
 
@@ -87,7 +87,7 @@ data/raw_datasets/javascript/
 
 ---
 
-### Step2：注册 Repo / 生成 Dockerfile（unify_repo_scripts.sh）
+### Step2：注册 Repo / 生成 Dockerfile 得到最终的 dataset 文件（unify_repo_scripts.sh）
 
 功能：  
 
@@ -138,9 +138,9 @@ data/patches/mark3labs__mcp-go_patch.jsonl
 
 功能：  
 
-1. 使用 Step1 raw_dataset → 生成 dataset  
-2. 使用 Step2 Docker 环境 → 构建 runner image  
-3. 使用 Step3 的 patches → 运行 evaluation
+1. 使用 Step1 采集github上的PR → 生成 raw_dataset  
+2. 使用 Step2 Docker 环境, 构建 runner image → 生成 dataset  
+3. 使用 Step3 的 patches 文件 和 Step2 生成的 dataset 文件 → 运行 evaluation
 
 完成后输出到：
 
