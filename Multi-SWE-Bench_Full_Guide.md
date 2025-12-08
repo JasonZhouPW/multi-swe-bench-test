@@ -229,7 +229,7 @@ RUN apk add --no-cache bash  # 或 apt-get install -y bash
 ./collect_raw_dataset.sh
 ```
 
-### Step2：生成 Docker & repo 脚本
+### Step2：生成 Docker & repo 脚本, 并生成 dataset 文件
 
 ```bash
 ./unify_repo_scripts.sh data/raw_datasets/<lang>/*_raw_dataset.jsonl
