@@ -19,12 +19,12 @@ if [ ! -f "$RAW_DATASET_PATH" ]; then
 fi
 
 ##########################################
-# 推导 BASE_NAME（去掉 _raw_dataset.jsonl）
+# 自动推导 BASE_NAME（去掉 _raw_dataset.jsonl）
 ##########################################
 BASE_NAME="${RAW_FILE%%_raw_dataset.jsonl}"
 
 ##########################################
-# 自动推导 patch 源文件
+# 推导 patch 源文件
 ##########################################
 PATCH_SRC="./data/patches/${BASE_NAME}.patch"
 
@@ -34,7 +34,7 @@ if [ ! -f "$PATCH_SRC" ]; then
 fi
 
 ##########################################
-# STEP 0: 调用 gen_patch_jsonl.sh
+# STEP 0: 生成 patch JSONL
 ##########################################
 echo "========================================="
 echo "🚀 STEP 0: Generating patch JSONL..."
@@ -52,7 +52,7 @@ fi
 echo "✅ Patch JSONL generated: $PATCH_JSONL"
 
 ##########################################
-# STEP 1: 调用 build_dataset.sh 生成 dataset
+# STEP 1: 构建 dataset（支持多条记录）
 ##########################################
 echo "========================================="
 echo "🚀 STEP 1: Building dataset..."
@@ -61,7 +61,7 @@ echo "========================================="
 ./build_dataset.sh "$RAW_FILE"
 
 ##########################################
-# 自动推导 dataset 文件名
+# 推导 dataset 文件名（多条合并在一个文件中）
 ##########################################
 DATASET_FILE="${BASE_NAME}_dataset.jsonl"
 DATASET_PATH="./data/output/$DATASET_FILE"
@@ -74,7 +74,7 @@ fi
 echo "✅ Dataset generated: $DATASET_PATH"
 
 ##########################################
-# STEP 1.5: 自动生成 ev_config.json
+# STEP 1.5: 生成 ev_config.json
 ##########################################
 echo "========================================="
 echo "🛠 STEP 1.5: Generating ev_config.json..."
@@ -110,7 +110,7 @@ EOF
 echo "✅ ev_config.json generated"
 
 ##########################################
-# STEP 2: 调用 run_evaluation.sh
+# STEP 2: 运行 evaluation
 ##########################################
 echo "========================================="
 echo "🚀 STEP 2: Running evaluation..."

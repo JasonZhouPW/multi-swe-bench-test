@@ -5,7 +5,7 @@
 set -euo pipefail
 
 ##########################################
-# 参数输入检查
+# 输入参数检查
 ##########################################
 if [ $# -ne 1 ]; then
     echo "Usage: $0 <raw_dataset_file.jsonl>"
@@ -14,43 +14,78 @@ if [ $# -ne 1 ]; then
 fi
 
 RAW_FILE="$1"
+RAW_PATH="./data/raw_datasets/$RAW_FILE"
 
-# 确认文件存在
-if [ ! -f "./data/raw_datasets/$RAW_FILE" ]; then
-    echo "❌ Error: ./data/raw_datasets/$RAW_FILE not found"
+if [ ! -f "$RAW_PATH" ]; then
+    echo "❌ Error: $RAW_PATH not found"
     exit 1
 fi
 
 ##########################################
 # 自动推导变量
 ##########################################
-
-# raw 文件名去掉后缀 _raw_dataset.jsonl → 标准 dataset 名称
 BASE_NAME="${RAW_FILE%%_raw_dataset.jsonl}"
 
-# config 文件名
-CONFIG_FILE="config_${BASE_NAME}.json"
+WORKDIR="./data/workdir"
+OUTPUT_DIR="./data/output"
+LOG_DIR="./data/logs"
+REPO_DIR="./data/repos"
+TEMP_DIR="./data/temp_dataset"
 
-# 输出 dataset 文件名
-OUTPUT_FILE="./data/output/${BASE_NAME}_dataset.jsonl"
+mkdir -p "$OUTPUT_DIR" "$LOG_DIR" "$TEMP_DIR"
+
+# 最终合并输出文件
+FINAL_OUTPUT="${OUTPUT_DIR}/${BASE_NAME}_dataset.jsonl"
+
+# 清空旧文件
+: > "$FINAL_OUTPUT"
+
+echo "🚀 Starting dataset build for multi-record file: $RAW_FILE"
+echo ""
 
 ##########################################
-# 生成 config JSON
+# 获取 JSONL 行数
 ##########################################
-echo "📄 Generating config file: $CONFIG_FILE"
+LINE_COUNT=$(wc -l < "$RAW_PATH" | tr -d ' ')
+echo "📌 Total records: $LINE_COUNT"
+echo ""
 
-cat > "$CONFIG_FILE" << EOF
+if [ "$LINE_COUNT" -eq 0 ]; then
+    echo "❌ Error: no records in dataset file."
+    exit 1
+fi
+
+##########################################
+# 主循环：每条 JSON 独立构建 + 合并输出
+##########################################
+index=0
+while IFS= read -r LINE; do
+    echo "============================================"
+    echo "📄 Processing record #$index"
+    echo "============================================"
+
+    TEMP_RAW_FILE="$TEMP_DIR/${BASE_NAME}_single_${index}.jsonl"
+    CONFIG_FILE="$TEMP_DIR/config_${BASE_NAME}_${index}.json"
+    SINGLE_OUT="${OUTPUT_DIR}/${BASE_NAME}_${index}_dataset.jsonl"
+
+    # 保存此条 raw 记录
+    echo "$LINE" > "$TEMP_RAW_FILE"
+
+    ##########################################
+    # 生成针对该条记录的 config
+    ##########################################
+    cat > "$CONFIG_FILE" << EOF
 {
     "mode": "dataset",
-    "workdir": "./data/workdir",
+    "workdir": "$WORKDIR",
     "raw_dataset_files": [
-        "./data/raw_datasets/$RAW_FILE"
+        "$TEMP_RAW_FILE"
     ],
     "force_build": false,
-    "output_dir": "./data/output",
+    "output_dir": "$OUTPUT_DIR",
     "specifics": [],
     "skips": [],
-    "repo_dir": "./data/repos",
+    "repo_dir": "$REPO_DIR",
     "need_clone": false,
     "global_env": [],
     "clear_env": true,
@@ -58,26 +93,37 @@ cat > "$CONFIG_FILE" << EOF
     "max_workers": 2,
     "max_workers_build_image": 8,
     "max_workers_run_instance": 8,
-    "log_dir": "./data/logs",
+    "log_dir": "$LOG_DIR",
     "log_level": "DEBUG"
 }
 EOF
 
-##########################################
-# 执行构建
-##########################################
-echo "🚀 Running dataset builder..."
-python -m multi_swe_bench.harness.build_dataset --config "$CONFIG_FILE"
+    ##########################################
+    # 执行构建
+    ##########################################
+    python -m multi_swe_bench.harness.build_dataset --config "$CONFIG_FILE"
+
+    if [ ! -f "$SINGLE_OUT" ]; then
+        echo "⚠️  Warning: record #$index did not produce dataset."
+    else
+        echo "📌 Appending record #$index → $FINAL_OUTPUT"
+        cat "$SINGLE_OUT" >> "$FINAL_OUTPUT"
+    fi
+
+    # 删除中间产物（可选）
+    rm -f "$SINGLE_OUT"
+
+    echo ""
+    index=$((index + 1))
+done < "$RAW_PATH"
 
 ##########################################
-# 输出构建结果
+# 清理临时目录
 ##########################################
-echo "======================================="
-if [ -f "$OUTPUT_FILE" ]; then
-    echo "✅ Dataset build completed successfully!"
-    echo "Output file: $OUTPUT_FILE"
-else
-    echo "⚠️  Build finished, but output file not found:"
-    echo "$OUTPUT_FILE"
-fi
-echo "======================================="
+rm -rf "$TEMP_DIR"
+
+echo "============================================"
+echo "🎉 Dataset build completed for: $RAW_FILE"
+echo "📦 Final merged dataset:"
+echo "➡ $FINAL_OUTPUT"
+echo "============================================"
