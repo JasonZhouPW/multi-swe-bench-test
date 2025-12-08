@@ -4,9 +4,9 @@ set -euo pipefail
 DATASET_DIR="./data/raw_datasets"
 
 # Worker scripts
-AUTO_ADD_IMPORT="./script_sh/auto_add_import.sh"
-CREATE_ORG_DIR="./script_sh/create_org_dir.sh"
-GEN_INSTANCE="./script_sh/gen_instance_from_dataset_golang.sh"
+AUTO_ADD_IMPORT="./data_pipeline/auto_add_import.sh"
+CREATE_ORG_DIR="./data_pipeline/create_org_dir.sh"
+GEN_INSTANCE="./data_pipeline/gen_instance_from_dataset_golang.sh"
 
 chmod +x "$AUTO_ADD_IMPORT" "$CREATE_ORG_DIR" "$GEN_INSTANCE"
 

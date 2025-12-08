@@ -10,7 +10,7 @@
 2. 流程总览  
 3. 步骤详解  
    - Step1：生成 Raw Dataset  
-   - Step2：注册 Repo（生成 Dockerfile 与 repo 脚本）  
+   - Step2：注册 Repo（生成 Dockerfile 与 repo 脚本） 并生成 dataset 文件  
    - Step3：基于 Raw Dataset 生成 Patch（LLM）  
    - Step4：构建 Dataset 并执行 Evaluation  
 4. 依赖关系与并行策略  
