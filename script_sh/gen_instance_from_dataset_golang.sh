@@ -57,7 +57,7 @@ esac
 ORG_PY=$(echo "$ORG" | tr '-' '_' | tr 'A-Z' 'a-z')
 REPO_PY=$(echo "$REPO" | tr '-' '_' | tr 'A-Z' 'a-z')
 
-CLASS_NAME=$(echo "$REPO_PY" | sed -E 's/(^|_)([a-z])/\U\2/g')   # snake → CamelCase
+CLASS_NAME=$(echo "$REPO_PY" | sed -E 's/(^|_)([a-z])/\U\2/g')
 
 ###################################################
 # Create folder
@@ -71,11 +71,9 @@ echo "📄 Generating instance file:"
 echo "   $TARGET_FILE"
 
 ###################################################
-# Write the template with variable replacements
+# Golang enhanced template (通用模板)
 ###################################################
-cat > "$TARGET_FILE" <<EOF
-# Auto-generated instance for $ORG/$REPO
-
+cat > "$TARGET_FILE" << 'EOF'
 import re
 from typing import Optional, Union
 
@@ -84,7 +82,7 @@ from multi_swe_bench.harness.instance import Instance, TestResult
 from multi_swe_bench.harness.pull_request import PullRequest
 
 
-class ${CLASS_NAME}ImageBase(Image):
+class ImageBase(Image):
     def __init__(self, pr: PullRequest, config: Config):
         self._pr = pr
         self._config = config
@@ -132,7 +130,7 @@ WORKDIR /home/
 """
 
 
-class ${CLASS_NAME}ImageDefault(Image):
+class ImageDefault(Image):
     def __init__(self, pr: PullRequest, config: Config):
         self._pr = pr
         self._config = config
@@ -146,7 +144,7 @@ class ${CLASS_NAME}ImageDefault(Image):
         return self._config
 
     def dependency(self) -> Image | None:
-        return ${CLASS_NAME}ImageBase(self.pr, self.config)
+        return ImageBase(self.pr, self.config)
 
     def image_tag(self) -> str:
         return f"pr-{self.pr.number}"
@@ -158,6 +156,56 @@ class ${CLASS_NAME}ImageDefault(Image):
         return [
             File(".", "fix.patch", f"{self.pr.fix_patch}"),
             File(".", "test.patch", f"{self.pr.test_patch}"),
+            File(".", "run.sh", """#!/bin/bash
+set -e
+cd /home/{pr.repo}
+go test -v -count=1 ./...
+""".format(pr=self.pr)),
+            File(".", "test-run.sh", """#!/bin/bash
+set -e
+cd /home/{pr.repo}
+git apply /home/test.patch
+go test -v -count=1 ./...
+""".format(pr=self.pr)),
+            File(".", "fix-run.sh", """#!/bin/bash
+set -e
+cd /home/{pr.repo}
+git apply /home/test.patch /home/fix.patch
+go test -v -count=1 ./...
+""".format(pr=self.pr)),
+            File(".", "check_git_changes.sh", """#!/bin/bash
+set -e
+if ! git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
+  echo "Not inside git repo"; exit 1;
+fi
+if [[ -n $(git status --porcelain) ]]; then
+  echo "Uncommitted changes"; exit 1;
+fi
+echo "Clean"
+"""),
+            File(".", "resolve_go_file.sh", """#!/bin/bash
+set -e
+REPO_PATH="$1"
+find "$REPO_PATH" -type f -name "*.go" | while read -r file; do
+  if [[ $(cat "$file") =~ ^[./a-zA-Z0-9_\\-]+\\.go$ ]]; then
+    target=$(cat "$file")
+    abs=$(realpath -m "$(dirname "$file")/$target")
+    if [ -f "$abs" ]; then
+      cat "$abs" > "$file"
+    fi
+  fi
+done
+"""),
+            File(".", "prepare.sh", """#!/bin/bash
+set -e
+cd /home/{pr.repo}
+git reset --hard
+bash /home/check_git_changes.sh
+git checkout {pr.base.sha}
+bash /home/check_git_changes.sh
+bash /home/resolve_go_file.sh /home/{pr.repo}
+go test -v -count=1 ./... || true
+""".format(pr=self.pr)),
         ]
 
     def dockerfile(self) -> str:
@@ -165,15 +213,13 @@ class ${CLASS_NAME}ImageDefault(Image):
         name = parent.image_name()
         tag = parent.image_tag()
 
-        copy_commands = ""
-        for file in self.files():
-            copy_commands += f"COPY {file.name} /home/\n"
+        copy_cmds = "".join([f"COPY {f.name} /home/\n" for f in self.files()])
 
         return f"""FROM {name}:{tag}
 
 {self.global_env}
 
-{copy_commands}
+{copy_cmds}
 
 RUN bash /home/prepare.sh
 
@@ -182,8 +228,8 @@ RUN bash /home/prepare.sh
 """
 
 
-@Instance.register("${ORG}", "${REPO}")
-class ${CLASS_NAME}(Instance):
+@Instance.register("{{ORG}}", "{{REPO}}")
+class InstanceTemplate(Instance):
     def __init__(self, pr: PullRequest, config: Config, *args, **kwargs):
         super().__init__()
         self._pr = pr
@@ -194,7 +240,7 @@ class ${CLASS_NAME}(Instance):
         return self._pr
 
     def dependency(self) -> Optional[Image]:
-        return ${CLASS_NAME}ImageDefault(self.pr, self._config)
+        return ImageDefault(self.pr, self._config)
 
     def run(self, cmd: str = "") -> str:
         return cmd or "bash /home/run.sh"
@@ -206,25 +252,17 @@ class ${CLASS_NAME}(Instance):
         return cmd or "bash /home/fix-run.sh"
 
     def parse_log(self, test_log: str) -> TestResult:
-        passed = set()
-        failed = set()
-        skipped = set()
+        passed, failed, skipped = set(), set(), set()
 
-        re_pass = re.compile(r"--- PASS: (\S+)")
-        re_fail = re.compile(r"--- FAIL: (\S+)")
-        re_skip = re.compile(r"--- SKIP: (\S+)")
+        re_pass = re.compile(r"--- PASS: (\\S+)")
+        re_fail = re.compile(r"--- FAIL: (\\S+)")
+        re_skip = re.compile(r"--- SKIP: (\\S+)")
 
         for line in test_log.splitlines():
             line = line.strip()
-
-            m = re_pass.match(line)
-            if m: passed.add(m.group(1))
-
-            m = re_fail.match(line)
-            if m: failed.add(m.group(1))
-
-            m = re_skip.match(line)
-            if m: skipped.add(m.group(1))
+            if m := re_pass.match(line): passed.add(m.group(1))
+            if m := re_fail.match(line): failed.add(m.group(1))
+            if m := re_skip.match(line): skipped.add(m.group(1))
 
         return TestResult(
             passed_count=len(passed),
@@ -235,5 +273,12 @@ class ${CLASS_NAME}(Instance):
             skipped_tests=skipped,
         )
 EOF
+
+###################################################
+# Inject org/repo into template
+###################################################
+# Replace placeholder {{ORG}} {{REPO}}
+sed -i "" "s/{{ORG}}/$ORG/g"  "$TARGET_FILE" 2>/dev/null || sed -i "s/{{ORG}}/$ORG/g" "$TARGET_FILE"
+sed -i "" "s/{{REPO}}/$REPO/g" "$TARGET_FILE" 2>/dev/null || sed -i "s/{{REPO}}/$REPO/g" "$TARGET_FILE"
 
 echo "✅ Generated: $TARGET_FILE"
