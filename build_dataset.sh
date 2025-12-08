@@ -1,11 +1,8 @@
-##chmod +x build_dataset.sh
-##./build_dataset.sh mark3labs__mcp-go_raw_dataset.jsonl
-
 #!/usr/bin/env bash
 set -euo pipefail
 
 ##########################################
-# 输入参数检查
+# 参数输入检查
 ##########################################
 if [ $# -ne 1 ]; then
     echo "Usage: $0 <raw_dataset_file.jsonl>"
@@ -25,7 +22,6 @@ fi
 # 自动推导变量
 ##########################################
 BASE_NAME="${RAW_FILE%%_raw_dataset.jsonl}"
-
 WORKDIR="./data/workdir"
 OUTPUT_DIR="./data/output"
 LOG_DIR="./data/logs"
@@ -34,29 +30,27 @@ TEMP_DIR="./data/temp_dataset"
 
 mkdir -p "$OUTPUT_DIR" "$LOG_DIR" "$TEMP_DIR"
 
-# 最终合并输出文件
 FINAL_OUTPUT="${OUTPUT_DIR}/${BASE_NAME}_dataset.jsonl"
-
-# 清空旧文件
 : > "$FINAL_OUTPUT"
 
-echo "🚀 Starting dataset build for multi-record file: $RAW_FILE"
+echo "🚀 Multi-record dataset builder"
+echo "📌 Input file: $RAW_FILE"
 echo ""
 
 ##########################################
-# 获取 JSONL 行数
+# 获取行数
 ##########################################
 LINE_COUNT=$(wc -l < "$RAW_PATH" | tr -d ' ')
 echo "📌 Total records: $LINE_COUNT"
 echo ""
 
 if [ "$LINE_COUNT" -eq 0 ]; then
-    echo "❌ Error: no records in dataset file."
+    echo "❌ No data in file."
     exit 1
 fi
 
 ##########################################
-# 主循环：每条 JSON 独立构建 + 合并输出
+# 遍历每条 JSONL
 ##########################################
 index=0
 while IFS= read -r LINE; do
@@ -64,15 +58,18 @@ while IFS= read -r LINE; do
     echo "📄 Processing record #$index"
     echo "============================================"
 
+    # 临时条目文件
     TEMP_RAW_FILE="$TEMP_DIR/${BASE_NAME}_single_${index}.jsonl"
     CONFIG_FILE="$TEMP_DIR/config_${BASE_NAME}_${index}.json"
     SINGLE_OUT="${OUTPUT_DIR}/${BASE_NAME}_${index}_dataset.jsonl"
 
-    # 保存此条 raw 记录
-    echo "$LINE" > "$TEMP_RAW_FILE"
+    ##########################################
+    # 清洗 JSON：jq -c 使其成为合法单行 JSON
+    ##########################################
+    echo "$LINE" | jq -c '.' > "$TEMP_RAW_FILE"
 
     ##########################################
-    # 生成针对该条记录的 config
+    # 生成 config 文件
     ##########################################
     cat > "$CONFIG_FILE" << EOF
 {
@@ -99,31 +96,29 @@ while IFS= read -r LINE; do
 EOF
 
     ##########################################
-    # 执行构建
+    # 执行单条构建
     ##########################################
+    echo "🚀 Running dataset builder for record #$index..."
     python -m multi_swe_bench.harness.build_dataset --config "$CONFIG_FILE"
 
-    if [ ! -f "$SINGLE_OUT" ]; then
-        echo "⚠️  Warning: record #$index did not produce dataset."
-    else
-        echo "📌 Appending record #$index → $FINAL_OUTPUT"
+    if [ -f "$SINGLE_OUT" ]; then
+        echo "📌 Appending #$index → $FINAL_OUTPUT"
         cat "$SINGLE_OUT" >> "$FINAL_OUTPUT"
+        rm -f "$SINGLE_OUT"
+    else
+        echo "⚠️ Warning: record #$index failed to produce dataset."
     fi
 
-    # 删除中间产物（可选）
-    rm -f "$SINGLE_OUT"
-
-    echo ""
     index=$((index + 1))
+    echo ""
 done < "$RAW_PATH"
 
-##########################################
-# 清理临时目录
-##########################################
 rm -rf "$TEMP_DIR"
 
-echo "============================================"
-echo "🎉 Dataset build completed for: $RAW_FILE"
-echo "📦 Final merged dataset:"
-echo "➡ $FINAL_OUTPUT"
-echo "============================================"
+##########################################
+# 总结输出
+##########################################
+echo "======================================="
+echo "🎉 Multi-record dataset build completed"
+echo "📦 Output file: $FINAL_OUTPUT"
+echo "======================================="
