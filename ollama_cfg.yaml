@@ -1,0 +1,105 @@
+# Formerly called: anthropic_filemap.yaml
+# This template is heavily inspired by anthropic's computer use demo, but you can use
+# it with any LM.
+agent:
+  model:
+    name: openai/doubao-seed-1-6-251015
+    per_instance_cost_limit: 0   
+    total_cost_limit: 0
+    per_instance_call_limit: 100
+    max_input_tokens: 0  
+    api_base: https://ark.cn-beijing.volces.com/api/v3
+    api_key: a7f8f9f5-2358-4c20-9dc2-37f541589545
+  # You probably do not need the cache control history processor if you're not
+  # using Claude, so please remove it if it's in your config.
+  templates:
+    system_message: |-
+      You are a multilingual software engineering and refactoring expert.
+      You can analyze, refactor, and improve code written in any major programming language
+      (e.g., Python, JavaScript, TypeScript, Java, C++, Go, Rust, C#, etc.).
+      Your goal is to make the codebase more maintainable, readable, and modular without altering its behavior.
+      Always follow the idiomatic best practices for the detected language (e.g., PEP8 for Python, ESLint conventions for JS/TS, Effective Java for Java, etc.).
+      Preserve all existing tests and public interfaces unless explicitly instructed to change them.
+
+    instance_template: &instance_template |-
+      <uploaded_files>
+      {{working_dir}}
+      </uploaded_files>
+      I’ve uploaded a multilingual code repository in the directory {{working_dir}}.
+      Please consider the following refactor description or PR request:
+
+      <refactor_description>
+      {{problem_statement}}
+      </refactor_description>
+
+      Your task:
+      - Refactor the non-test files in the repository according to the objectives above.
+      - Keep all existing functionality intact — this is a **behavior-preserving refactor**.
+      - Do NOT modify any test or configuration files unless explicitly requested.
+      - Ensure your refactor adheres to the conventions and idioms of the target language.
+
+      Key goals:
+      - Improve **readability**, **maintainability**, **modularity**, and **performance**.
+      - Simplify complex or repetitive logic.
+      - Apply consistent **naming conventions** and **file organization**.
+      - Add or improve concise **docstrings/comments** explaining function or class intent.
+      - Remove dead code or unused imports.
+      - Refactor large classes or functions into smaller, reusable components.
+      - Apply relevant **design patterns** or **best practices** for the detected language.
+      - Optimize where possible without changing outputs.
+
+      Workflow:
+      1. Detect the primary programming languages in {{working_dir}}.
+      2. Identify target files and code regions relevant to the <refactor_description>.
+      3. Propose a clear, structured refactor plan (language-specific if applicable).
+      4. Implement minimal yet effective code changes to achieve the plan.
+      5. Ensure all existing tests still pass after the refactor.
+      6. Provide a short summary of what was improved and why it benefits the codebase.
+
+      Your reasoning should include:
+      - Detected language(s)
+      - Refactor strategy used
+      - Design or style guidelines followed
+      - Explanation of benefits and trade-offs
+    next_step_template: |-
+      OBSERVATION:
+      {{observation}}
+    next_step_no_output_template: |-
+      Your command ran successfully and did not produce any output.
+  tools:
+    env_variables:
+      PAGER: cat
+      MANPAGER: cat
+      LESS: -R
+      PIP_PROGRESS_BAR: 'off'
+      TQDM_DISABLE: '1'
+      GIT_PAGER: cat
+    bundles:
+      - path: tools/registry
+      - path: tools/edit_anthropic
+      - path: tools/review_on_submit_m
+    registry_variables:
+      USE_FILEMAP: 'true'
+      SUBMIT_REVIEW_MESSAGES:
+        - |
+          Thank you for your work on this issue. Please carefully follow the steps below to help review your changes.
+
+          1. If you made any changes to your code after running the reproduction script, please run the reproduction script again.
+            If the reproduction script is failing, please revisit your changes and make sure they are correct.
+            If you have already removed your reproduction script, please ignore this step.
+          2. Remove your reproduction script (if you haven't done so already).
+          3. If you have modified any TEST files, please revert them to the state they had before you started fixing the issue.
+            You can do this with `git checkout -- /path/to/test/file.py`. Use below <diff> to find the files you need to revert.
+          4. Run the submit command again to confirm.
+
+          Here is a list of all of your changes:
+
+          <diff>
+          {{diff}}
+          </diff>
+    enable_bash_tool: true
+    parse_function:
+      type: function_calling
+  history_processors:
+    - type: cache_control
+      last_n_messages: 2
