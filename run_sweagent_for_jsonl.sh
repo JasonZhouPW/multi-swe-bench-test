@@ -11,10 +11,15 @@ PATCH_DIR="$WORK_DIR/patches"
 mkdir -p "$GITHUB_DIR" "$PATCH_DIR"
 echo "config file:$CFG"
 if command -v jq >/dev/null 2>&1; then
-  jq -r 'select(has("org") and has("repo") and has("number") and has("issue_url") and .issue_url != null) | [.org,.repo,.issue_url] | @tsv' "$JSONL" |
+  echo "11111"
+  jq -r 'select(has("org") and has("repo") and has("number") and has("issue_url") and .issue_url != null) | [.org,.repo,.number,.issue_url] | @tsv' "$JSONL" |
   while IFS=$'\t' read -r org repo number issue_url; do
+    echo "3333"
+    echo "$org $repo $issue_url"
     [ -n "$org" ] && [ -n "$repo" ] && [ -n "$issue_url" ] || continue
+    echo "33335555"
     if [[ "$issue_url" =~ ^https://api.github.com/repos/([^/]+)/([^/]+)/issues/([0-9]+)$ ]]; then
+      echo "4444"
       issueNumber="${BASH_REMATCH[3]}"
       issue_url="https://github.com/${BASH_REMATCH[1]}/${BASH_REMATCH[2]}/issues/${BASH_REMATCH[3]}"
     fi
@@ -45,6 +50,7 @@ if command -v jq >/dev/null 2>&1; then
     rm -f "$log_file"
   done
 else
+  echo "22222"
   while IFS= read -r line; do
     [ -n "$line" ] || continue
     printf '%s' "$line" | grep -q '"issue_url"' || continue
