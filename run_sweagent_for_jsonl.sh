@@ -6,13 +6,17 @@ JSONL="${2:-$WORK_DIR/extracted_ds.jsonl}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CFG="$SCRIPT_DIR/ollama_cfg.yaml"
 GITHUB_DIR="$WORK_DIR/github"
+PATCH_DIR="$WORK_DIR/patches"
 
-mkdir -p "$GITHUB_DIR"
-
+mkdir -p "$GITHUB_DIR" "$PATCH_DIR"
+echo "config file:$CFG"
 if command -v jq >/dev/null 2>&1; then
   jq -r 'select(has("org") and has("repo") and has("issue_url") and .issue_url != null) | [.org,.repo,.issue_url] | @tsv' "$JSONL" |
   while IFS=$'\t' read -r org repo issue_url; do
     [ -n "$org" ] && [ -n "$repo" ] && [ -n "$issue_url" ] || continue
+    if [[ "$issue_url" =~ ^https://api.github.com/repos/([^/]+)/([^/]+)/issues/([0-9]+)$ ]]; then
+      issue_url="https://github.com/${BASH_REMATCH[1]}/${BASH_REMATCH[2]}/issues/${BASH_REMATCH[3]}"
+    fi
     clone_dir="$GITHUB_DIR/$org/$repo"
     if [ -d "$clone_dir/.git" ]; then
       :
@@ -20,10 +24,24 @@ if command -v jq >/dev/null 2>&1; then
       mkdir -p "$(dirname "$clone_dir")"
       git clone "https://github.com/$org/$repo.git" "$clone_dir"
     fi
+    log_file="$(mktemp)"
+    echo "log file:$log_file"
+    set +e
+    echo "Running command:$CFG,$clone_dir,  $org/$repo, $issue_url"
     sweagent run --config "$CFG" \
       --env.repo.path="$clone_dir" \
       --problem_statement.github_url="$issue_url" \
-      --env.deployment.image="python:3.11"
+      --env.deployment.image="python:3.11" | tee "$log_file"
+    status=$?
+    set -e
+    if grep -q "Submission successful" "$log_file"; then
+      patch_path=$(grep -Eo 'PATCH_FILE_PATH=[^[:space:]]+' "$log_file" | tail -n1 | cut -d= -f2-)
+      if [ -n "$patch_path" ] && [ -f "$patch_path" ]; then
+        mkdir -p patches
+        cp "$patch_path" patches/
+      fi
+    fi
+    rm -f "$log_file"
   done
 else
   while IFS= read -r line; do
@@ -34,6 +52,10 @@ else
     repo=$(printf '%s' "$line" | sed -n 's/.*"repo"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
     issue_url=$(printf '%s' "$line" | sed -n 's/.*"issue_url"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
     [ -n "$org" ] && [ -n "$repo" ] && [ -n "$issue_url" ] || continue
+    if [[ "$issue_url" =~ ^https://api.github.com/repos/([^/]+)/([^/]+)/issues/([0-9]+)$ ]]; then
+      issueNumber=${BASH_REMATCH[3]}  
+      issue_url="https://github.com/${BASH_REMATCH[1]}/${BASH_REMATCH[2]}/issues/${BASH_REMATCH[3]}"
+    fi
     clone_dir="$GITHUB_DIR/$org/$repo"
     if [ -d "$clone_dir/.git" ]; then
       :
@@ -41,10 +63,28 @@ else
       mkdir -p "$(dirname "$clone_dir")"
       git clone "https://github.com/$org/$repo.git" "$clone_dir"
     fi
+    log_file="$(mktemp)"
+    echo "log file:$log_file"
+    set +e
+    echo "Running command:$CFG,$clone_dir,  $org/$repo, $issue_url"
+
     sweagent run --config "$CFG" \
       --env.repo.path="$clone_dir" \
       --problem_statement.github_url="$issue_url" \
-      --env.deployment.image="python:3.11"
+      --env.deployment.image="python:3.11" | tee "$log_file"
+    status=$?
+    set -e
+    echo "status:$status"
+    if grep -q "Submission successful" "$log_file"; then
+      echo "Submission successful"
+      patch_path=$(grep -Eo 'PATCH_FILE_PATH=[^[:space:]]+' "$log_file" | tail -n1 | cut -d= -f2-)
+      echo "patch_path:$patch_path"
+      if [ -n "$patch_path" ] && [ -f "$patch_path" ]; then
+        # mkdir -p patches
+        echo "cp $patch_path $PATCH_DIR/$org-$repo-$issueNumber.patch"
+        cp "$patch_path" "$PATCH_DIR/$org-$repo-$issueNumber.patch"
+      fi
+    fi
+    rm -f "$log_file"
   done < "$JSONL"
 fi
-
