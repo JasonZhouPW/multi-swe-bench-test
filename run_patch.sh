@@ -61,7 +61,7 @@ echo -e "${CYAN}=== Step 1: Extract dataset ===${NC}"
 echo "Input : $RAW_DATASET"
 echo "Output: $EXTRACTED_DATASET"
 
-./run_extract_raw_dataset.sh "$RAW_DATASET"
+./data_pipeline/run_extract_raw_dataset.sh "$RAW_DATASET"
 
 echo -e "${GREEN}✓ Extracted dataset:${NC} $EXTRACTED_DATASET"
 echo
@@ -72,7 +72,7 @@ echo "Workdir: $SWE_AGENT_DIR"
 echo "Input  : $EXTRACTED_DATASET"
 
 set -x
-./run_sweagent_for_jsonl.sh "$SWE_AGENT_DIR" "$EXTRACTED_DATASET"
+./data_pipeline/run_sweagent_for_jsonl.sh "$SWE_AGENT_DIR" "$EXTRACTED_DATASET"
 set +x
 
 echo -e "${GREEN}✓ SWE-Agent finished; patch snippets in:${NC} $PATCH_DIR"
@@ -84,7 +84,7 @@ echo "Patches dir : $PATCH_DIR"
 echo "Final output: $FINAL_OUTPUT"
 
 set -x
-./gen_patches_jsonl.sh "$PATCH_DIR" "$FINAL_OUTPUT"
+./data_pipeline/gen_patches_jsonl.sh "$PATCH_DIR" "$FINAL_OUTPUT"
 set +x
 
 echo -e "${GREEN}✓ Final patch JSONL generated:${NC} $FINAL_OUTPUT"
