@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ================================================================
+# Pipeline 流程说明（非常重要）
+#
+# raw_dataset.jsonl
+#       |
+#       | run_extract_raw_dataset.sh
+#       v
+# extracted_ds.jsonl
+#       |
+#       | run_sweagent_for_jsonl.sh
+#       v
+# swe-agent-test/patches/   (SWE-Agent 生成的 raw patch 片段)
+#       |
+#       | gen_patches_jsonl.sh
+#       v
+# data/patches/<basename>_patch.jsonl   <-- 最终生成的 patch 结果
+#
+# ================================================================
+
+# ===== Colors =====
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+CYAN='\033[0;36m'
+NC='\033[0m'
+
+# ===== Input Check =====
+# ===== Input Check =====
+if [ $# -ne 1 ]; then
+    echo -e "${RED}Usage: $0 <raw_dataset_path>${NC}"
+    echo -e "Example: $0 data/raw_datasets/mark3labs__mcp-go_raw_dataset.jsonl"
+    exit 1
+fi
+
+# 用户输入可以是绝对路径、相对路径、带目录或不带目录
+RAW_DATASET="$1"
+
+if [ ! -f "$RAW_DATASET" ]; then
+    echo -e "${RED}Error: Input file not found: $RAW_DATASET${NC}"
+    exit 1
+fi
+
+# 只提取文件名，不包含路径
+RAW_FILENAME=$(basename "$RAW_DATASET")
+
+# ===== Extract basename =====
+# "mark3labs__mcp-go_raw_dataset.jsonl" -> "mark3labs__mcp-go"
+BASENAME=$(echo "$RAW_FILENAME" | sed 's/_raw_dataset\.jsonl$//')
+
+EXTRACTED_DATASET="data/raw_datasets/${BASENAME}_extracted_ds.jsonl"
+SWE_AGENT_DIR="./swe-agent-test"
+PATCH_DIR="${SWE_AGENT_DIR}/patches"
+FINAL_OUTPUT="data/patches/${BASENAME}_patch.jsonl"
+
+mkdir -p data/patches
+
+# ===== Step 1: Extract =====
+echo -e "${CYAN}=== Step 1: Extract dataset ===${NC}"
+echo "Input : $RAW_DATASET"
+echo "Output: $EXTRACTED_DATASET"
+
+./run_extract_raw_dataset.sh "$RAW_DATASET"
+
+echo -e "${GREEN}✓ Extracted dataset:${NC} $EXTRACTED_DATASET"
+echo
+
+# ===== Step 2: Run SWE-Agent =====
+echo -e "${CYAN}=== Step 2: Run SWE-Agent ===${NC}"
+echo "Workdir: $SWE_AGENT_DIR"
+echo "Input  : $EXTRACTED_DATASET"
+
+set -x
+./run_sweagent_for_jsonl.sh "$SWE_AGENT_DIR" "$EXTRACTED_DATASET"
+set +x
+
+echo -e "${GREEN}✓ SWE-Agent finished; patch snippets in:${NC} $PATCH_DIR"
+echo
+
+# ===== Step 3: Generate final patch JSONL =====
+echo -e "${CYAN}=== Step 3: Generate final patch ===${NC}"
+echo "Patches dir : $PATCH_DIR"
+echo "Final output: $FINAL_OUTPUT"
+
+set -x
+./gen_patches_jsonl.sh "$PATCH_DIR" "$FINAL_OUTPUT"
+set +x
+
+echo -e "${GREEN}✓ Final patch JSONL generated:${NC} $FINAL_OUTPUT"
+echo
+echo -e "${CYAN}=== Pipeline completed successfully ===${NC}"
