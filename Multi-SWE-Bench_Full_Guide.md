@@ -12,7 +12,7 @@
    - Step1：生成 Raw Dataset  
    - Step2：注册 Repo（生成 Dockerfile 与 repo 脚本） 并生成 dataset 文件  
    - Step3：基于 Raw Dataset 生成 Patch（LLM）  
-   - Step4：构建 Dataset 并执行 Evaluation  
+   - Step4：执行 Evaluation  
 4. 依赖关系与并行策略  
 5. 文件夹结构示例  
 6. 常见问题与排查  
@@ -39,7 +39,7 @@ Step2: 生成 Repo Docker 与脚本（unify_repo_scripts.sh）
 Step3: 使用 LLM 生成 Patch（gen_patch_from_raw_dataset.py）
   (依赖 Step1 输出 raw_dataset)
 
-Step4: 构建 Dataset 并执行 Evaluation（run_full_pipeline.sh）
+Step4: 执行 Evaluation（run_full_pipeline.sh）
   (依赖 Step2 + Step3 输出)
 ```
 
@@ -134,7 +134,7 @@ data/patches/mark3labs__mcp-go_patch.jsonl
 
 ---
 
-### Step4：构建 Dataset 并执行 Evaluation（run_full_pipeline.sh）
+### Step4：执行 Evaluation（run_full_pipeline.sh）
 
 功能：  
 
@@ -188,9 +188,9 @@ data/
  │       └─ test.sh
  ├─ patches/
  │   └─ owner__repo_patch.jsonl
- ├─ output/
+ ├─ datasets/
  │   └─ owner__repo_dataset.jsonl
- ├─ final_output/
+ ├─ output/
  └─ logs/
 ```
 
@@ -238,15 +238,13 @@ RUN apk add --no-cache bash  # 或 apt-get install -y bash
 ### Step3：生成 patch
 
 ```bash
-python gen_patch_from_raw_dataset.py \
-  --raw data/raw_datasets/<lang>/*_raw_dataset.jsonl \
-  --out data/patches/
+ ./run_patch.sh  data/raw_datasets/<lang>/*_raw_dataset.jsonl
 ```
 
 ### Step4：构建 dataset + 评测
 
 ```bash
-./run_full_pipeline.sh owner__repo_raw_dataset.jsonl
+./run_full_pipeline.sh data/raw_datasets/<lang>/*_raw_dataset.jsonl
 ```
 
 ---
