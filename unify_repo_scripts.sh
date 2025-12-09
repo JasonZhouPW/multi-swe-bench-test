@@ -1,31 +1,54 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DATASET_DIR="./data/raw_datasets"
-
 # Worker scripts
 AUTO_ADD_IMPORT="./data_pipeline/auto_add_import.sh"
 CREATE_ORG_DIR="./data_pipeline/create_org_dir.sh"
 GEN_INSTANCE="./data_pipeline/gen_instance_from_dataset_golang.sh"
-
 chmod +x "$AUTO_ADD_IMPORT" "$CREATE_ORG_DIR" "$GEN_INSTANCE"
 
-echo "🚀 Starting unified pipeline (scan ONLY *raw_dataset* files)"
-echo "📂 Dataset directory: $DATASET_DIR"
-echo ""
+echo "🚀 Starting unified pipeline"
 
-FOUND=false
+########################################
+# Parse input argument
+########################################
+INPUT=${1:-""}
 
-for RAW_FILE in "$DATASET_DIR"/*raw_dataset*.jsonl; do
-    if [[ "$RAW_FILE" == "$DATASET_DIR/*raw_dataset*.jsonl" ]]; then
-        echo "❌ No raw_dataset files found in $DATASET_DIR"
+if [[ -z "$INPUT" ]]; then
+    echo "❌ Usage: $0 <raw_dataset_file | dataset_directory>"
+    exit 1
+fi
+
+########################################
+# Detect file or directory
+########################################
+FILES=()
+
+if [[ -f "$INPUT" ]]; then
+    # Case 1: specific file provided
+    echo "📘 Input is a file: $INPUT"
+    FILES+=("$INPUT")
+elif [[ -d "$INPUT" ]]; then
+    # Case 2: input is a directory
+    echo "📂 Input is a directory: $INPUT"
+    while IFS= read -r f; do FILES+=("$f"); done < <(ls "$INPUT"/*raw_dataset*.jsonl 2>/dev/null || true)
+
+    if [[ ${#FILES[@]} -eq 0 ]]; then
+        echo "❌ No *raw_dataset*.jsonl files found in directory: $INPUT"
         exit 1
     fi
+else
+    echo "❌ Invalid path: $INPUT"
+    exit 1
+fi
 
-    FOUND=true
-
+########################################
+# Process all matched files
+########################################
+for RAW_FILE in "${FILES[@]}"; do
     FILENAME=$(basename "$RAW_FILE")
-    TEMP_FILE="$DATASET_DIR/temp_single_${FILENAME}"
+    DIRNAME=$(dirname "$RAW_FILE")
+    TEMP_FILE="${DIRNAME}/temp_single_${FILENAME}"
 
     echo "=============================================="
     echo "📘 Processing raw dataset: $FILENAME"
@@ -35,36 +58,24 @@ for RAW_FILE in "$DATASET_DIR"/*raw_dataset*.jsonl; do
     echo "📌 Extracting first record → $TEMP_FILE"
     head -n 1 "$RAW_FILE" > "$TEMP_FILE"
 
-    # ----------------------------------------
-    # Step 1
     echo "🔧 Step 1: auto_add_import.sh..."
     "$AUTO_ADD_IMPORT" "$TEMP_FILE"
     echo ""
 
-    # Step 2
     echo "📂 Step 2: create_org_dir.sh..."
     "$CREATE_ORG_DIR" "$TEMP_FILE"
     echo ""
 
-    # Step 3
     echo "🧬 Step 3: gen_instance_from_dataset_golang.sh..."
     "$GEN_INSTANCE" "$TEMP_FILE"
     echo ""
 
-    # ----------------------------------------
-    # 🧹 自动清理临时文件
     echo "🧹 Cleaning temp file: $TEMP_FILE"
     rm -f "$TEMP_FILE"
     echo "✔ Temp file removed."
-    echo ""
 
     echo "🎉 Finished processing: $FILENAME"
     echo ""
 done
 
-if [ "$FOUND" = false ]; then
-    echo "❌ No valid *raw_dataset* files found. Nothing processed."
-    exit 1
-fi
-
-echo "🏁 All raw_dataset files processed successfully!"
+echo "🏁 All selected raw_dataset files processed successfully!"
