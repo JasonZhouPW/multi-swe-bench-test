@@ -11,7 +11,7 @@ if [ $# -ne 1 ]; then
 fi
 
 DATASET_FILE="$1"
-DATASET_PATH="./data/output/$DATASET_FILE"
+DATASET_PATH="./data/datasets/$DATASET_FILE"
 
 if [ ! -f "$DATASET_PATH" ]; then
     echo "❌ Error: dataset file not found: $DATASET_PATH"
@@ -23,7 +23,7 @@ fi
 ##########################################
 BASE_NAME="${DATASET_FILE%%_dataset.jsonl}"
 PATCH_FILE="${BASE_NAME}_patch.jsonl"
-PATCH_PATH="./data/raw_datasets/$PATCH_FILE"
+PATCH_PATH="./data/patches/$PATCH_FILE"
 
 if [ ! -f "$PATCH_PATH" ]; then
     echo "❌ Error: patch file not found: $PATCH_PATH"
