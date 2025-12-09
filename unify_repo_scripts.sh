@@ -78,4 +78,33 @@ for RAW_FILE in "${FILES[@]}"; do
     echo ""
 done
 
+##########################################
+# Finally: 构建 dataset（支持多条记录）
+##########################################
+echo "========================================="
+echo "🚀 Finally: Building dataset..."
+echo "========================================="
+
+# ---- Safe derive BASE_NAME ----
+if [ -z "${BASE_NAME-}" ]; then
+    RAW_BASENAME=$(basename "$RAW_FILE")
+    BASE_NAME="${RAW_BASENAME%%_raw_dataset.jsonl}"
+fi
+# --------------------------------
+
+./data_pipeline/build_dataset.sh "$RAW_FILE"
+
+##########################################
+# 推导 dataset 文件名（多条合并在一个文件中）
+##########################################
+DATASET_FILE="${BASE_NAME}_dataset.jsonl"
+DATASET_PATH="./data/datasets/$DATASET_FILE"
+
+if [ ! -f "$DATASET_PATH" ]; then
+    echo "❌ Error: dataset file not generated: $DATASET_PATH"
+    exit 1
+fi
+
+echo "✅ Dataset generated: $DATASET_PATH"
+
 echo "🏁 All selected raw_dataset files processed successfully!"
