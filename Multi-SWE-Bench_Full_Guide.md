@@ -241,7 +241,7 @@ RUN apk add --no-cache bash  # 或 apt-get install -y bash
  ./run_patch.sh  data/raw_datasets/<lang>/*_raw_dataset.jsonl
 ```
 
-### Step4：构建 dataset + 评测
+### Step4：评测 run_evaluation
 
 ```bash
 ./run_full_pipeline.sh data/raw_datasets/<lang>/*_raw_dataset.jsonl
