@@ -37,10 +37,10 @@ if command -v jq >/dev/null 2>&1; then
     status=$?
     set -e
     if grep -q "Submission successful" "$log_file"; then
-      patch_path=$(awk '/PATCH_FILE_PATH=/{printf $0; getline; print $0}' test.log | awk -F"'" '{print $2}' | tr -d ' ')
+      patch_path=$(awk '/PATCH_FILE_PATH=/{printf $0; getline; print $0}' "$log_file" | awk -F"'" '{print $2}' | tr -d ' ')
       if [ -n "$patch_path" ] && [ -f "$patch_path" ]; then
-        echo "cp $patch_path $PATCH_DIR/$org-$repo-${issueNumber:-unknown}.patch"
-        cp "$patch_path" "$PATCH_DIR/$org-$repo-${issueNumber:-unknown}.patch"
+        echo "cp $patch_path $PATCH_DIR/${org}_${repo}_${number}_${issueNumber}.patch"
+        cp "$patch_path" "$PATCH_DIR/${org}_${repo}_${number}_${issueNumber}.patch"
       fi
     fi
     rm -f "$log_file"
@@ -85,7 +85,7 @@ else
     if grep -q "Submission successful" "$log_file"; then
       echo "===Submission successful"
       # patch_path=$(grep -Eo "PATCH_FILE_PATH=['\"][^'\"]*\.patch['\"]" "$log_file" | tail -n100 | sed -E "s/^PATCH_FILE_PATH=['\"]//; s/['\"]$//")
-      patch_path=$(awk '/PATCH_FILE_PATH=/{printf $0; getline; print $0}' test.log | awk -F"'" '{print $2}' | tr -d ' ')
+      patch_path=$(awk '/PATCH_FILE_PATH=/{printf $0; getline; print $0}' "$log_file" | awk -F"'" '{print $2}' | tr -d ' ')
       echo "===patch_path:$patch_path"
       echo "===number:$number"
       if [ -n "$patch_path" ] && [ -f "$patch_path" ]; then
