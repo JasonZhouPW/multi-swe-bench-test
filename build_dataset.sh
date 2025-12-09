@@ -7,23 +7,37 @@ set -euo pipefail
 if [ $# -ne 1 ]; then
     echo "Usage: $0 <raw_dataset_file.jsonl>"
     echo "Example: $0 mark3labs__mcp-go_raw_dataset.jsonl"
+    echo "         $0 data/raw_datasets/mark3labs__mcp-go_raw_dataset.jsonl"
     exit 1
 fi
 
-RAW_FILE="$1"
-RAW_PATH="./data/raw_datasets/$RAW_FILE"
+##########################################
+# 自动处理路径与文件名
+##########################################
+RAW_PATH="$1"
 
+# 如果传入的是相对路径，则保持相对；如果是文件名，则补默认路径
 if [ ! -f "$RAW_PATH" ]; then
-    echo "❌ Error: $RAW_PATH not found"
-    exit 1
+    # 尝试在默认目录查找
+    if [ -f "./data/raw_datasets/$RAW_PATH" ]; then
+        RAW_PATH="./data/raw_datasets/$RAW_PATH"
+    else
+        echo "❌ Error: Cannot find file: $RAW_PATH"
+        exit 1
+    fi
 fi
+
+# 解析出文件名和目录
+RAW_FILE="$(basename "$RAW_PATH")"
+RAW_DIR="$(dirname "$RAW_PATH")"
 
 ##########################################
 # 自动推导变量
 ##########################################
 BASE_NAME="${RAW_FILE%%_raw_dataset.jsonl}"
+
 WORKDIR="./data/workdir"
-OUTPUT_DIR="./data/output"
+OUTPUT_DIR="./data/datasets"
 LOG_DIR="./data/logs"
 REPO_DIR="./data/repos"
 TEMP_DIR="./data/temp_dataset"
@@ -34,7 +48,7 @@ FINAL_OUTPUT="${OUTPUT_DIR}/${BASE_NAME}_dataset.jsonl"
 : > "$FINAL_OUTPUT"
 
 echo "🚀 Multi-record dataset builder"
-echo "📌 Input file: $RAW_FILE"
+echo "📌 Input file: $RAW_PATH"
 echo ""
 
 ##########################################
@@ -58,7 +72,6 @@ while IFS= read -r LINE; do
     echo "📄 Processing record #$index"
     echo "============================================"
 
-    # 临时条目文件
     TEMP_RAW_FILE="$TEMP_DIR/${BASE_NAME}_single_${index}.jsonl"
     CONFIG_FILE="$TEMP_DIR/config_${BASE_NAME}_${index}.json"
     SINGLE_OUT="${OUTPUT_DIR}/${BASE_NAME}_${index}_dataset.jsonl"
