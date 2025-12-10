@@ -36,7 +36,7 @@ Step1: 生成 Raw Dataset
 Step2: 生成 Repo Docker 与脚本（unify_repo_scripts.sh）
   (依赖 Step1 输出 raw_dataset)
 
-Step3: 使用 LLM 生成 Patch（gen_patch_from_raw_dataset.py）
+Step3: 使用 LLM 生成 Patch（run_patch.sh）
   (依赖 Step1 输出 raw_dataset)
 
 Step4: 执行 Evaluation（run_full_pipeline.sh）
@@ -177,10 +177,7 @@ wait
 ```
 data/
  ├─ raw_datasets/
- │   ├─ python/
- │   │   └─ repo_raw_dataset.jsonl
- │   ├─ go/
- │   └─ javascript/
+ │   └─ repo_raw_dataset.jsonl
  ├─ repos/
  │   └─ owner__repo/
  │       ├─ Dockerfile
@@ -190,7 +187,9 @@ data/
  │   └─ owner__repo_patch.jsonl
  ├─ datasets/
  │   └─ owner__repo_dataset.jsonl
- ├─ output/
+ ├─ final_output/
+ │   └─ repo
+ │        └─ repo_final_report.jsonl
  └─ logs/
 ```
 
@@ -232,19 +231,19 @@ RUN apk add --no-cache bash  # 或 apt-get install -y bash
 ### Step2：生成 Docker & repo 脚本, 并生成 dataset 文件
 
 ```bash
-./unify_repo_scripts.sh data/raw_datasets/<lang>/*_raw_dataset.jsonl
+./unify_repo_scripts.sh data/raw_datasets/*_raw_dataset.jsonl
 ```
 
 ### Step3：生成 patch
 
 ```bash
- ./run_patch.sh  data/raw_datasets/<lang>/*_raw_dataset.jsonl
+ ./run_patch.sh  data/raw_datasets/*_raw_dataset.jsonl
 ```
 
 ### Step4：评测 run_evaluation
 
 ```bash
-./run_full_pipeline.sh data/raw_datasets/<lang>/*_raw_dataset.jsonl
+./run_full_pipeline.sh data/raw_datasets/*_raw_dataset.jsonl
 ```
 
 ---

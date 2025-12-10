@@ -68,18 +68,49 @@ cat > "$EV_CONFIG" << EOF
 EOF
 
 ##########################################
+# 解析数据集文件名 -> 生成输出文件名
+##########################################
+##########################################
+# 解析数据集文件名 -> 生成标准项目名
+##########################################
+DATASET_PATH="$1"
+BASENAME=$(basename "$DATASET_PATH")    # 例如 mark3labs__mcp-go_dataset.jsonl
+
+# 1. 去掉 .jsonl
+NAME_NO_SUFFIX="${BASENAME%.jsonl}"     # mark3labs__mcp-go_dataset
+
+# 2. 去掉最后的 "_dataset" 或 "_raw_dataset"（如果有）
+PROJECT_NAME="${NAME_NO_SUFFIX%_dataset}"
+PROJECT_NAME="${PROJECT_NAME%_raw_dataset}"
+
+OUTPUT_FILENAME="${PROJECT_NAME}_final_report.json"
+# 输出目录
+REPORT_DIR="./data/final_output/${PROJECT_NAME}"
+mkdir -p "$REPORT_DIR"
+
+##########################################
 # 执行 Evaluation
 ##########################################
 echo "🚀 Running evaluation..."
-python -m multi_swe_bench.harness.run_evaluation --config "$EV_CONFIG"
+python -m multi_swe_bench.harness.run_evaluation \
+    --config "$EV_CONFIG" \
+    --output_dir "$REPORT_DIR"
+
+##########################################
+# 重命名默认 final_report.json -> 项目名版本
+##########################################
+DEFAULT_REPORT="${REPORT_DIR}/final_report.json"
+TARGET_REPORT="${REPORT_DIR}/${OUTPUT_FILENAME}"
+
+if [ -f "$DEFAULT_REPORT" ]; then
+    mv "$DEFAULT_REPORT" "$TARGET_REPORT"
+fi
 
 ##########################################
 # 输出结果
 ##########################################
-REPORT_DIR="./data/final_output"
-
 echo "========================================="
 echo "✅ Evaluation completed!"
 echo "Results stored in:"
-echo "$REPORT_DIR"
+echo "$TARGET_REPORT"
 echo "========================================="
