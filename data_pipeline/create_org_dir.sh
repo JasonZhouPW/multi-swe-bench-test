@@ -41,15 +41,52 @@ map_language() {
     esac
 }
 
+# 将名称 sanitize 成合法的 package/dir 名（主要用于 python 导入 & 文件夹安全）
+# - 把非字母数字和下划线替换成下划线
+# - 转小写（Python 包名通常小写）
+# - 若以数字开头，前面加下划线
+sanitize_name() {
+    local name="$1"
+    # replace non-alnum/_ with _
+    name="$(echo "$name" | sed 's/[^A-Za-z0-9_]/_/g')"
+    # to lower-case
+    name="$(echo "$name" | tr '[:upper:]' '[:lower:]')"
+    # if starts with digit, prefix underscore
+    if [[ "$name" =~ ^[0-9] ]]; then
+        name="_$name"
+    fi
+    echo "$name"
+}
+
+# 确保目录与 __init__.py（若为 python 包）存在
+ensure_package_dirs() {
+    local path="$1"
+    # create full path
+    mkdir -p "$path"
+    # create __init__.py for all path components (only if language is python)
+    # We'll create __init__.py in each subdir so imports work
+    IFS='/' read -r -a parts <<< "$path"
+    cur=""
+    for p in "${parts[@]}"; do
+        cur="$cur/$p"
+        # skip if empty (leading slash)
+        if [ -z "$p" ]; then
+            continue
+        fi
+        touch "${cur}/__init__.py" 2>/dev/null || true
+    done
+}
+
 echo "📘 Processing raw dataset: $RAW_FILE"
 echo ""
 
-while IFS= read -r line; do
+while IFS= read -r line || [ -n "$line" ]; do
     # 从 raw_dataset 的嵌套结构提取 org 和 language
-    ORG=$(echo "$line" | jq -r '.org')
+    ORG_RAW=$(echo "$line" | jq -r '.org')
+    REPO_RAW=$(echo "$line" | jq -r '.base.repo.name')
     LANG_RAW=$(echo "$line" | jq -r '.base.repo.language')
 
-    if [ "$ORG" == "null" ] || [ -z "$ORG" ]; then
+    if [ "$ORG_RAW" == "null" ] || [ -z "$ORG_RAW" ]; then
         echo "⚠️  Skipped invalid line (missing org): $line"
         continue
     fi
@@ -67,14 +104,29 @@ while IFS= read -r line; do
         continue
     fi
 
+    # 对 org/repo 做安全化处理（用于目录与 import 路径）
+    ORG=$(sanitize_name "$ORG_RAW")
+    REPO=$(sanitize_name "$REPO_RAW")
+
     BASE_DIR="multi_swe_bench/harness/repos/${LANG}"
     ORG_DIR="${BASE_DIR}/${ORG}"
+    REPO_DIR="${ORG_DIR}/${REPO}"
     INIT_FILE="${ORG_DIR}/__init__.py"
 
-    echo "📂 Creating directory: $ORG_DIR"
-    mkdir -p "$ORG_DIR"
+    echo "📂 Creating directory: $REPO_DIR"
+    # 如果是 python，我们会在所有层级创建 __init__.py；对其他语言也创建目录（但不会强制 __init__ 创建）
+    mkdir -p "$REPO_DIR"
+    # 如果是 python，确保每一层都是包
+    if [ "$LANG" == "python" ]; then
+        ensure_package_dirs "$BASE_DIR/$ORG"
+        ensure_package_dirs "$REPO_DIR"
+    else
+        # 为保持一致也创建 org 的 __init__.py（可选）
+        touch "$INIT_FILE" 2>/dev/null || true
+    fi
 
-    IMPORT_LINE="from multi_swe_bench.harness.repos.${LANG}.${ORG}.mcp_go import *"
+    # 构造 import line（使用已 sanitize 的名称，保证有效）
+    IMPORT_LINE="from multi_swe_bench.harness.repos.${LANG}.${ORG}.${REPO} import *"
 
     touch "$INIT_FILE"
 
@@ -86,7 +138,6 @@ while IFS= read -r line; do
     fi
 
     echo ""
-
 done < "$RAW_FILE"
 
 echo "✅ All org directories generated successfully!"
