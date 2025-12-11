@@ -2,14 +2,20 @@
 set -euo pipefail
 
 RAW_JSON="$1"
+EXTRA_JSON="$2"   # 新增参数
 
 if [ ! -f "$RAW_JSON" ]; then
     echo "❌ raw dataset not found: $RAW_JSON"
     exit 1
 fi
 
+if [ ! -f "$EXTRA_JSON" ]; then
+    echo "❌ extra JSON not found: $EXTRA_JSON"
+    exit 1
+fi
+
 ###################################################
-# Extract fields
+# Extract fields (org/repo/lang)
 ###################################################
 LINE=$(head -n 1 "$RAW_JSON")
 
@@ -22,6 +28,17 @@ if [ -z "$LANG_RAW" ]; then
 fi
 
 LANG=$(echo "$LANG_RAW" | tr 'A-Z' 'a-z')
+
+########################################
+# Build setup_commands block
+########################################
+SETUP_CMDS_BLOCK=""
+while IFS= read -r cmd; do
+    SETUP_CMDS_BLOCK+="$(printf "%s\n" "$cmd")"
+done <<< "$(jq -r '.setup_commands[]' "$EXTRA_JSON")"
+
+# Escape for sed (slashes & ampersands)
+ESCAPED_SETUP=$(printf "%s" "$SETUP_CMDS_BLOCK" | sed 's/[&/\]/\\&/g')
 
 ###################################################
 # Map language → folder
@@ -204,6 +221,10 @@ bash /home/check_git_changes.sh
 git checkout {pr.base.sha}
 bash /home/check_git_changes.sh
 bash /home/resolve_go_file.sh /home/{pr.repo}
+
+# Injected setup commands
+__SETUP_COMMANDS_BLOCK__
+
 go test -v -count=1 ./... || true
 """.format(pr=self.pr)),
         ]
@@ -274,6 +295,14 @@ class InstanceTemplate(Instance):
         )
 EOF
 
+########################################
+# Replace placeholder with commands
+########################################
+# macOS + Linux compatible sed
+sed -i "" "s|__SETUP_COMMANDS_BLOCK__|$ESCAPED_SETUP|g" "$TARGET_FILE" 2>/dev/null \
+    || sed -i "s|__SETUP_COMMANDS_BLOCK__|$ESCAPED_SETUP|g" "$TARGET_FILE"
+
+echo "✅ Injected setup commands from $EXTRA_JSON"
 ###################################################
 # Inject org/repo into template
 ###################################################
