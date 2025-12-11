@@ -32,13 +32,8 @@ LANG=$(echo "$LANG_RAW" | tr 'A-Z' 'a-z')
 ########################################
 # Build setup_commands block
 ########################################
-SETUP_CMDS_BLOCK=""
-while IFS= read -r cmd; do
-    SETUP_CMDS_BLOCK+="$(printf "%s\n" "$cmd")"
-done <<< "$(jq -r '.setup_commands[]' "$EXTRA_JSON")"
-
-# Escape for sed (slashes & ampersands)
-ESCAPED_SETUP=$(printf "%s" "$SETUP_CMDS_BLOCK" | sed 's/[&/\]/\\&/g')
+ESCAPED_SETUP=$(jq -r '.setup_commands | join("\n")' "$EXTRA_JSON" | sed 's|[/&]|\\&|g')
+ESCAPED_SETUP=${ESCAPED_SETUP//$'\n'/\\n}
 
 ###################################################
 # Map language → folder
