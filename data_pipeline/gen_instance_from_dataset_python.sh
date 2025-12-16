@@ -2,9 +2,15 @@
 set -euo pipefail
 
 RAW_JSON="$1"
+EXTRA_JSON="$2"   # 新增参数
 
 if [ ! -f "$RAW_JSON" ]; then
     echo "❌ raw dataset not found: $RAW_JSON"
+    exit 1
+fi
+
+if [ ! -f "$EXTRA_JSON" ]; then
+    echo "❌ extra JSON not found: $EXTRA_JSON"
     exit 1
 fi
 
@@ -18,10 +24,16 @@ REPO=$(echo "$LINE" | sed -n 's/.*"repo": *"\([^"]*\)".*/\1/p')
 LANG_RAW=$(echo "$LINE" | sed -n 's/.*"language": *"\([^"]*\)".*/\1/p')
 
 if [ -z "$LANG_RAW" ]; then
-    LANG_RAW="golang"
+    LANG_RAW="python"
 fi
 
 LANG=$(echo "$LANG_RAW" | tr 'A-Z' 'a-z')
+
+########################################
+# Build setup_commands block
+########################################
+SETUP_COMMANDS=$(jq -r '.setup_commands | join("\n")' "$EXTRA_JSON")
+export SETUP_COMMANDS
 
 ###################################################
 # Map language → folder
@@ -174,15 +186,19 @@ class ImageDefault(Image):
                 "prepare.sh",
                 """ls -la
 ###ACTION_DELIMITER###
-pip install -e .
+pip install -e . || true
 ###ACTION_DELIMITER###
-pip install pytest coverage colorama
+pip install pytest coverage colorama || true
 ###ACTION_DELIMITER###
 echo 'coverage run -m pytest -v --tb=short --basetemp=/tmp tests/' > test_commands.sh
 ###ACTION_DELIMITER###
+
+# Injected setup commands
+__SETUP_COMMANDS_BLOCK__
+
 cat test_commands.sh
 ###ACTION_DELIMITER###
-bash test_commands.sh""",
+bash test_commands.sh || true""",
             ),
             File(
                 ".",
@@ -303,11 +319,22 @@ class InstanceTemplate(Instance):
         )
 EOF
 
+########################################
+# Replace placeholder with commands
+########################################
+# macOS + Linux compatible sed
+perl -0777 -i.bak -pe '
+    s/__SETUP_COMMANDS_BLOCK__/$ENV{SETUP_COMMANDS}/g
+' "$TARGET_FILE"
+
+echo "✅ Injected setup commands from $EXTRA_JSON"
 ###################################################
 # Inject org/repo into template
 ###################################################
 # Replace placeholder {{ORG}} {{REPO}}
 sed -i "" "s/{{ORG}}/$ORG/g"  "$TARGET_FILE" 2>/dev/null || sed -i "s/{{ORG}}/$ORG/g" "$TARGET_FILE"
 sed -i "" "s/{{REPO}}/$REPO/g" "$TARGET_FILE" 2>/dev/null || sed -i "s/{{REPO}}/$REPO/g" "$TARGET_FILE"
+
+rm -f "$TARGET_FILE.bak"
 
 echo "✅ Generated: $TARGET_FILE"
