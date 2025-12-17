@@ -186,7 +186,8 @@ git apply /home/test.patch
             File(".", "fix-run.sh", """#!/bin/bash
 set -e
 cd /home/{pr.repo}
-git apply /home/test.patch /home/fix.patch
+git apply /home/test.patch 
+git apply /home/fix.patch
 ./mvnw clean test -fae
 """.format(pr=self.pr)),
             File(".", "check_git_changes.sh", """#!/bin/bash
@@ -272,25 +273,57 @@ class InstanceTemplate(Instance):
         return cmd or "bash /home/fix-run.sh"
 
     def parse_log(self, test_log: str) -> TestResult:
-        passed, failed, skipped = set(), set(), set()
+        passed_tests = set()
+        failed_tests = set()
+        skipped_tests = set()
 
-        re_pass = re.compile(r"--- PASS: (\\S+)")
-        re_fail = re.compile(r"--- FAIL: (\\S+)")
-        re_skip = re.compile(r"--- SKIP: (\\S+)")
+        re_pass_tests = [
+            # re.compile(
+            #     r"Running (.+?)\nTests run: (\d+), Failures: (\d+), Errors: (\d+), Skipped: (\d+), Time elapsed: [\d\.]+ sec",
+            # ),
+            re.compile(
+                r"Running\s+(.+?)\s*\n(?:(?!Tests run:).*\n)*Tests run:\s*(\d+),\s*Failures:\s*(\d+),\s*Errors:\s*(\d+),\s*Skipped:\s*(\d+),\s*Time elapsed:\s*[\d.]+\s*sec"
+            )
+        ]
+        re_fail_tests = [
+            re.compile(
+                r"Running (.+?)\nTests run: (\d+), Failures: (\d+), Errors: (\d+), Skipped: (\d+), Time elapsed: [\d\.]+ sec +<<< FAILURE!"
+            )
+        ]
 
-        for line in test_log.splitlines():
-            line = line.strip()
-            if m := re_pass.match(line): passed.add(m.group(1))
-            if m := re_fail.match(line): failed.add(m.group(1))
-            if m := re_skip.match(line): skipped.add(m.group(1))
+        for re_pass_test in re_pass_tests:
+            tests = re_pass_test.findall(test_log, re.MULTILINE)
+            for test in tests:
+                test_name = test[0]
+                tests_run = int(test[1])
+                failures = int(test[2])
+                errors = int(test[3])
+                skipped = int(test[4])
+                if (
+                    tests_run > 0
+                    and failures == 0
+                    and errors == 0
+                    and skipped != tests_run
+                ):
+                    passed_tests.add(test_name)
+                elif failures > 0 or errors > 0:
+                    failed_tests.add(test_name)
+                elif skipped == tests_run:
+                    skipped_tests.add(test_name)
+
+        for re_fail_test in re_fail_tests:
+            tests = re_fail_test.findall(test_log, re.MULTILINE)
+            for test in tests:
+                test_name = test[0]
+                failed_tests.add(test_name)
 
         return TestResult(
-            passed_count=len(passed),
-            failed_count=len(failed),
-            skipped_count=len(skipped),
-            passed_tests=passed,
-            failed_tests=failed,
-            skipped_tests=skipped,
+            passed_count=len(passed_tests),
+            failed_count=len(failed_tests),
+            skipped_count=len(skipped_tests),
+            passed_tests=passed_tests,
+            failed_tests=failed_tests,
+            skipped_tests=skipped_tests,
         )
 EOF
 
