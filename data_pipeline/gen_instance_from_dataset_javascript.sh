@@ -27,6 +27,7 @@ if [ -z "$LANG_RAW" ]; then
     LANG_RAW="javascript"
 fi
 
+
 LANG=$(echo "$LANG_RAW" | tr 'A-Z' 'a-z')
 
 ########################################
