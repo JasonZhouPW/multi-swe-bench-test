@@ -4,8 +4,8 @@ set -euo pipefail
 # Worker scripts
 AUTO_ADD_IMPORT="./data_pipeline/auto_add_import.sh"
 CREATE_ORG_DIR="./data_pipeline/create_org_dir.sh"
-GEN_INSTANCE="./data_pipeline/gen_instance_from_dataset_golang.sh"
-chmod +x "$AUTO_ADD_IMPORT" "$CREATE_ORG_DIR" "$GEN_INSTANCE"
+#GEN_INSTANCE="./data_pipeline/gen_instance_from_dataset_golang.sh"
+chmod +x "$AUTO_ADD_IMPORT" "$CREATE_ORG_DIR"
 
 echo "🚀 Starting unified pipeline"
 
@@ -41,6 +41,15 @@ else
     echo "❌ Invalid path: $INPUT"
     exit 1
 fi
+
+LINE=$(head -n 1 "$INPUT")
+LANG_RAW=$(echo "$LINE" | sed -n 's/.*"language": *"\([^"]*\)".*/\1/p')
+echo "🔍 Detected language: $LANG_RAW"
+if [ -z "$LANG_RAW" ]; then
+    LANG_RAW="java"
+fi
+GEN_INSTANCE="./data_pipeline/gen_instance_from_dataset_${LANG_RAW}.sh"
+chmod +x "$GEN_INSTANCE"
 
 ########################################
 # Process all matched files
