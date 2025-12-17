@@ -170,63 +170,86 @@ class ImageDefault(Image):
 
     def files(self) -> list[File]:
         return [
-            File(".", "fix.patch", f"{self.pr.fix_patch}"),
-            File(".", "test.patch", f"{self.pr.test_patch}"),
-            File(".", "run.sh", """#!/bin/bash
+            File(
+                ".",
+                "fix.patch",
+                f"{self.pr.fix_patch}",
+            ),
+            File(
+                ".",
+                "test.patch",
+                f"{self.pr.test_patch}",
+            ),
+            File(
+                ".",
+                "check_git_changes.sh",
+                """#!/bin/bash
 set -e
-cd /home/{pr.repo}
-./mvnw clean test -fae
-""".format(pr=self.pr)),
-            File(".", "test-run.sh", """#!/bin/bash
-set -e
-cd /home/{pr.repo}
-git apply /home/test.patch
-./mvnw clean test -fae
-""".format(pr=self.pr)),
-            File(".", "fix-run.sh", """#!/bin/bash
-set -e
-cd /home/{pr.repo}
-git apply /home/test.patch 
-git apply /home/fix.patch
-./mvnw clean test -fae
-""".format(pr=self.pr)),
-            File(".", "check_git_changes.sh", """#!/bin/bash
-set -e
+
 if ! git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
-  echo "Not inside git repo"; exit 1;
+  echo "check_git_changes: Not inside a git repository"
+  exit 1
 fi
+
 if [[ -n $(git status --porcelain) ]]; then
-  echo "Uncommitted changes"; exit 1;
+  echo "check_git_changes: Uncommitted changes"
+  exit 1
 fi
-echo "Clean"
-"""),
-            File(".", "resolve_go_file.sh", """#!/bin/bash
+
+echo "check_git_changes: No uncommitted changes"
+exit 0
+
+""".format(),
+            ),
+            File(
+                ".",
+                "prepare.sh",
+                """#!/bin/bash
 set -e
-REPO_PATH="$1"
-find "$REPO_PATH" -type f -name "*.go" | while read -r file; do
-  if [[ $(cat "$file") =~ ^[./a-zA-Z0-9_\\-]+\\.go$ ]]; then
-    target=$(cat "$file")
-    abs=$(realpath -m "$(dirname "$file")/$target")
-    if [ -f "$abs" ]; then
-      cat "$abs" > "$file"
-    fi
-  fi
-done
-"""),
-            File(".", "prepare.sh", """#!/bin/bash
-set -e
+
 cd /home/{pr.repo}
 git reset --hard
 bash /home/check_git_changes.sh
 git checkout {pr.base.sha}
 bash /home/check_git_changes.sh
 
-# Injected setup commands
-__SETUP_COMMANDS_BLOCK__
+mvn clean test -Dmaven.test.skip=false -DfailIfNoTests=false || true
+""".format(pr=self.pr),
+            ),
+            File(
+                ".",
+                "run.sh",
+                """#!/bin/bash
+set -e
 
 cd /home/{pr.repo}
-./mvnw clean test -fae
-""".format(pr=self.pr)),
+mvn clean test -Dmaven.test.skip=false -DfailIfNoTests=false
+""".format(pr=self.pr),
+            ),
+            File(
+                ".",
+                "test-run.sh",
+                """#!/bin/bash
+set -e
+
+cd /home/{pr.repo}
+git apply --whitespace=nowarn /home/test.patch
+mvn clean test -Dmaven.test.skip=false -DfailIfNoTests=false
+
+""".format(pr=self.pr),
+            ),
+            File(
+                ".",
+                "fix-run.sh",
+                """#!/bin/bash
+set -e
+
+cd /home/{pr.repo}
+git apply --whitespace=nowarn /home/test.patch /home/fix.patch
+mvn clean test -Dmaven.test.skip=false -DfailIfNoTests=false
+
+""".format(pr=self.pr),
+            ),
         ]
 
     def dockerfile(self) -> str:
