@@ -133,10 +133,12 @@ class ImageBase(Image):
 
 {self.global_env}
 
+ENV DEBIAN_FRONTEND=noninteractive
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
 WORKDIR /home/
-
-RUN apt-get update && apt-get install -y git openjdk-21-jdk
-
+RUN apt-get update && apt-get install -y git openjdk-11-jdk
+RUN apt-get install -y maven
 {code}
 
 {self.clear_env}
