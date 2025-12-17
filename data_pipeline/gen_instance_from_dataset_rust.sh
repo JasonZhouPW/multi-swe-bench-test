@@ -183,6 +183,27 @@ class ImageDefault(Image):
             ),
             File(
                 ".",
+                "check_git_changes.sh",
+                """#!/bin/bash
+set -e
+
+if ! git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
+  echo "check_git_changes: Not inside a git repository"
+  exit 1
+fi
+
+if [[ -n $(git status --porcelain) ]]; then
+  echo "check_git_changes: Uncommitted changes"
+  exit 1
+fi
+
+echo "check_git_changes: No uncommitted changes"
+exit 0
+
+""".format(),
+            ),
+            File(
+                ".",
                 "prepare.sh",
                 """#!/bin/bash
 set -e
@@ -193,16 +214,20 @@ bash /home/check_git_changes.sh
 git checkout {pr.base.sha}
 bash /home/check_git_changes.sh
 
-cargo test || true""",
+cargo test || true
+
+""".format(pr=self.pr),
             ),
             File(
                 ".",
                 "run.sh",
                 """#!/bin/bash
-cd /home/[[REPO_NAME]]
+set -e
+
+cd /home/{pr.repo}
 cargo test
 
-""".replace("[[REPO_NAME]]", repo_name),
+""".format(pr=self.pr),
             ),
             File(
                 ".",
@@ -214,7 +239,7 @@ cd /home/{pr.repo}
 git apply /home/test.patch
 cargo test
 
-""".replace("[[REPO_NAME]]", repo_name),
+""".format(pr=self.pr),
             ),
             File(
                 ".",
@@ -226,7 +251,7 @@ cd /home/{pr.repo}
 git apply /home/test.patch /home/fix.patch
 cargo test
 
-""".replace("[[REPO_NAME]]", repo_name),
+""".format(pr=self.pr),
             ),
         ]
 
