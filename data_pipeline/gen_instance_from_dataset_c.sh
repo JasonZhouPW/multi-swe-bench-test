@@ -24,7 +24,7 @@ REPO=$(echo "$LINE" | sed -n 's/.*"repo": *"\([^"]*\)".*/\1/p')
 LANG_RAW=$(echo "$LINE" | sed -n 's/.*"language": *"\([^"]*\)".*/\1/p')
 
 if [ -z "$LANG_RAW" ]; then
-    LANG_RAW="cpp"
+    LANG_RAW="c"
 fi
 
 LANG=$(echo "$LANG_RAW" | tr 'A-Z' 'a-z')
@@ -56,6 +56,9 @@ case "$LANG" in
         ;;
     cpp|c++|c)
         LANG_DIR="cpp"
+        ;;
+    c)
+        LANG_DIR="c"
         ;;
     *)
         echo "❌ Unsupported language: $LANG"
@@ -109,7 +112,7 @@ class ImageBase(Image):
         return self._config
 
     def dependency(self) -> Union[str, "Image"]:
-        return "gcc:latest"
+        return "gcc:7"
 
     def image_tag(self) -> str:
         return "base"
@@ -234,9 +237,9 @@ set -e
 
 cd /home/{pr.repo}
 cd build
-cmake -Dtesting=ON ..
-make -j 8
-ctest -j 8
+cmake ..
+make
+ctest -V
 
 """.format(pr=self.pr),
             ),
@@ -249,9 +252,9 @@ set -e
 cd /home/{pr.repo}
 git apply --whitespace=nowarn /home/test.patch
 cd build
-cmake -Dtesting=ON ..
-make -j 8
-ctest -j 8
+cmake ..
+make
+ctest -V
 
 """.format(pr=self.pr),
             ),
@@ -264,9 +267,9 @@ set -e
 cd /home/{pr.repo}
 git apply --whitespace=nowarn /home/test.patch /home/fix.patch
 cd build
-cmake -Dtesting=ON ..
-make -j 8
-ctest -j 8
+cmake ..
+make
+ctest -V
 
 """.format(pr=self.pr),
             ),
@@ -324,15 +327,9 @@ class InstanceTemplate(Instance):
         failed_tests = set()
         skipped_tests = set()
 
-        re_passes = [
-            re.compile(r"^\[       OK \] (\S+?)( \(.+\))?$"),
-            re.compile(r"^\x1b\[0;32m\[       OK \] \x1b\[0m(\S+?)( \(.+\))?$"),
-            re.compile(r"^\x1b\[92m---- Passed: (\S+?)\x1b\[0m$"),
-        ]
-        re_fails = [
-            re.compile(r"^\[  FAILED  \] (\S+?)( \(.+\))?$"),
-            re.compile(r"^\x1b\[0;31m\[  FAILED  \] \x1b\[0m(\S+?)( \(.+\))?$"),
-            re.compile(r"^\x1b\[91m\*\*\*\* FAILED: (\S+?)\x1b\[0m$"),
+        re_pass_tests = [re.compile(r"^\d+/\d+\s*Test\s*#\d+:\s*(.*?)\s*\.+\s*Passed")]
+        re_fail_tests = [
+            re.compile(r"^\d+/\d+\s*Test\s*#\d+:\s*(.*?)\s*\.+\s*\*+Failed")
         ]
 
         for line in test_log.splitlines():
@@ -340,14 +337,14 @@ class InstanceTemplate(Instance):
             if not line:
                 continue
 
-            for re_pass in re_passes:
-                pass_match = re_pass.match(line)
+            for re_pass_test in re_pass_tests:
+                pass_match = re_pass_test.match(line)
                 if pass_match:
                     test = pass_match.group(1)
                     passed_tests.add(test)
 
-            for re_fail in re_fails:
-                fail_match = re_fail.match(line)
+            for re_fail_test in re_fail_tests:
+                fail_match = re_fail_test.match(line)
                 if fail_match:
                     test = fail_match.group(1)
                     failed_tests.add(test)
