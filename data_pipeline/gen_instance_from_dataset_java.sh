@@ -213,6 +213,9 @@ bash /home/check_git_changes.sh
 git checkout {pr.base.sha}
 bash /home/check_git_changes.sh
 
+# Injected setup commands
+__SETUP_COMMANDS_BLOCK__
+
 mvn clean test -Dmaven.test.skip=false -DfailIfNoTests=false || true
 """.format(pr=self.pr),
             ),

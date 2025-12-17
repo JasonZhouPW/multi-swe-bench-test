@@ -214,6 +214,9 @@ bash /home/check_git_changes.sh
 git checkout {pr.base.sha}
 bash /home/check_git_changes.sh
 
+# Injected setup commands
+__SETUP_COMMANDS_BLOCK__
+
 cargo test || true
 
 """.format(pr=self.pr),
