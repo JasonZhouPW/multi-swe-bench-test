@@ -75,9 +75,12 @@ def extract_resolved_issues(pull: dict) -> list[int]:
     # 正则匹配 <keyword> #number
     issues_pat = re.compile(r"(\w+)\s*\#(\d+)")
 
-    # 拼接文本来源
-    text = pull.get("title", "") + "\n" + pull.get("body", "")
-    text += "\n" + "\n".join(commit.get("message","") for commit in pull.get("commits",[]))
+    # 拼接文本来源（确保 None 被转换为空字符串，避免类型拼接错误）
+    title = pull.get("title") or ""
+    body = pull.get("body") or ""
+    commits_msgs = [ (commit.get("message") or "") for commit in pull.get("commits", []) ]
+    text = title + "\n" + body
+    text += "\n" + "\n".join(commits_msgs)
 
     # 移除 HTML 注释
     text = re.sub(r"(?s)<!--.*?-->", "", text)

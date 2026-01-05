@@ -46,7 +46,6 @@ if command -v jq >/dev/null 2>&1; then
     rm -f "$log_file"
   done
 else
-  echo "22222"
   while IFS= read -r line; do
     [ -n "$line" ] || continue
     printf '%s' "$line" | grep -q '"issue_url"' || continue

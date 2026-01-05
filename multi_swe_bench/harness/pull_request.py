@@ -178,6 +178,8 @@ class PullRequest(PullRequestBase):
     resolved_issues: list[ResolvedIssue]
     fix_patch: str
     test_patch: str
+    head: Optional[Base] = None
+    merge_commit_sha: Optional[str] = None
     tag: str = ""
     number_interval: str = ""
     lang: str = ""
@@ -197,6 +199,10 @@ class PullRequest(PullRequestBase):
             raise ValueError(f"Invalid fix_patch: {self.fix_patch}")
         if not isinstance(self.test_patch, str):
             raise ValueError(f"Invalid test_patch: {self.test_patch}")
+        if not isinstance(self.head, (Base, type(None))):
+            raise ValueError(f"Invalid head: {self.head}")
+        if not isinstance(self.merge_commit_sha, (str, type(None))):
+            raise ValueError(f"Invalid merge_commit_sha: {self.merge_commit_sha}")
 
     @classmethod
     def from_dict(cls, d: dict) -> "PullRequest":

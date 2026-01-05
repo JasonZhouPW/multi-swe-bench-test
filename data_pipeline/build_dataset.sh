@@ -42,7 +42,7 @@ LOG_DIR="./data/logs"
 REPO_DIR="./data/repos"
 TEMP_DIR="./data/temp_dataset"
 
-mkdir -p "$OUTPUT_DIR" "$LOG_DIR" "$TEMP_DIR"
+mkdir -p "$WORKDIR" "$OUTPUT_DIR" "$LOG_DIR" "$REPO_DIR" "$TEMP_DIR"
 
 FINAL_OUTPUT="${OUTPUT_DIR}/${BASE_NAME}_dataset.jsonl"
 : > "$FINAL_OUTPUT"

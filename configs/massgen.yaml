@@ -1,0 +1,51 @@
+agents:
+- id: agent_a
+  backend:
+    type: zai
+    model: GLM-4.6
+    cwd: workspace1
+    exclude_file_operation_mcps: false
+    base_url: https://open.bigmodel.cn/api/paas/v4
+
+# - id: agent_b
+#   backend:
+#     type: zai
+#     model: GLM-4.6
+#     cwd: workspace2
+#     exclude_file_operation_mcps: false
+#     base_url: https://open.bigmodel.cn/api/paas/v4
+
+# - id: agent_c
+#   backend:
+#     type: zai
+#     model: GLM-4.6
+#     cwd: workspace3
+#     exclude_file_operation_mcps: false
+#     base_url: https://open.bigmodel.cn/api/paas/v4
+ 
+orchestrator:
+  snapshot_storage: snapshots
+  agent_temporary_workspace: temp_workspaces
+  max_new_answers_per_agent: 5
+  enable_multimodal_tools: true
+  image_generation_backend: openai
+  video_generation_backend: openai
+  audio_generation_backend: openai
+  coordination:
+    max_orchestration_restarts: 2
+    enable_agent_task_planning: true
+    task_planning_filesystem_mode: true
+    enable_memory_filesystem_mode: true
+    enable_subagents: true
+    subagent_default_timeout: 300
+    subagent_max_concurrent: 3
+  context_paths:
+  - path: .
+    permission: write
+  voting_sensitivity: lenient
+  answer_novelty_requirement: lenient
+timeout_settings:
+  orchestrator_timeout_seconds: 1800
+ui:
+  type: rich_terminal
+  logging_enabled: true

@@ -34,7 +34,7 @@ class GitHubScraper:
         self,
         language: str,
         min_stars: int = 0,
-        max_results: int = 1000000,
+        max_results: int = 100,
         output_format: str = "console",
         token: Optional[str] = None,
         output_dir: str = ".",

@@ -41,7 +41,8 @@ def get_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--org", type=str, required=False, help="Organization name.")
     parser.add_argument("--repo", type=str, required=False, help="Repository name.")
-
+    parser.add_argument("--created_at", type=str, required=False, default=None, help="Filter PRs created after this datetime (ISO format).")
+    parser.add_argument("--key_words", type=str, required=False, default=None, help="keywords to filter PRs, separated by commas.")
     return parser
 
 
@@ -65,7 +66,7 @@ def is_relevant_pull(pull, key_words: str = None) -> bool:
     default_keywords = {"refactor"}
 
     # 用户指定 key_words（允许多个关键词用逗号分隔）
-    if key_words:
+    if key_words is not None and key_words != "":
         user_keywords = {w.strip().lower() for w in key_words.split(",")}
         keywords = user_keywords
     else:
@@ -109,17 +110,19 @@ def main(tokens: list[str], out_dir: Path, org: str, repo: str, created_at: str 
         return obj
 
     with open(out_dir / f"{org}__{repo}_prs.jsonl", "w", encoding="utf-8") as file:
-        for pull in tqdm(r.get_pulls("all"), desc="Pull Requests"):
+        for pull in tqdm(r.get_pulls(state="closed", sort="updated", direction="desc"), desc="Pull Requests"):
 
             # -------------------------------
             # ⭐ 关键过滤逻辑：只保留 created_at > filter_dt 的 PR
             # -------------------------------
-            if filter_dt and pull.created_at <= filter_dt:
+            if filter_dt is not None and filter_dt != "" and pull.created_at <= filter_dt:
+                # print(f"Skipping PR #{pull.number} created at {pull.created_at}")
                 continue
              # ⭐ 在这里做你要的过滤
-            if not is_relevant_pull(pull,key_words):
+            if key_words is not None and key_words != "" and not is_relevant_pull(pull,key_words):
+                # print(f"Skipping PR #{pull.number} not matching keywords")
                 continue
-
+            # print(f"Get PR #{pull.number} created at {pull.created_at} keywords {key_words} matched")
             file.write(
                 json.dumps(
                     {
@@ -161,4 +164,4 @@ if __name__ == "__main__":
 
     tokens = get_tokens(args.tokens)
 
-    main(tokens, Path.cwd() / args.out_dir, args.org, args.repo)
+    main(tokens, Path.cwd() / args.out_dir, args.org, args.repo, args.created_at, args.key_words)

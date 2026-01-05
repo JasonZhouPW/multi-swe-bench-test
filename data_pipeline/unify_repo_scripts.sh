@@ -2,8 +2,8 @@
 set -euo pipefail
 
 # Worker scripts
-AUTO_ADD_IMPORT="./data_pipeline/auto_add_import.sh"
-CREATE_ORG_DIR="./data_pipeline/create_org_dir.sh"
+AUTO_ADD_IMPORT="./auto_add_import.sh"
+CREATE_ORG_DIR="./create_org_dir.sh"
 #GEN_INSTANCE="./data_pipeline/gen_instance_from_dataset_golang.sh"
 chmod +x "$AUTO_ADD_IMPORT" "$CREATE_ORG_DIR"
 
@@ -51,8 +51,7 @@ fi
 if [ "$LANG_RAW" == "Go" ]; then
     LANG_RAW="golang"
 fi
-GEN_INSTANCE="./data_pipeline/gen_instance_from_dataset_${LANG_RAW}.sh"
-echo " Using GEN_INSTANCE: $GEN_INSTANCE"
+GEN_INSTANCE="./gen_instance_from_dataset_${LANG_RAW}.sh"
 chmod +x "$GEN_INSTANCE"
 
 ########################################
@@ -79,8 +78,8 @@ for RAW_FILE in "${FILES[@]}"; do
     "$CREATE_ORG_DIR" "$TEMP_FILE"
     echo ""
 
-    echo "🧬 Step 3: gen_instance_from_dataset_golang.sh..."
-    "$GEN_INSTANCE" "$TEMP_FILE" "./repolaunch/data/setup.jsonl"
+    echo "🧬 Step 3: $GEN_INSTANCE..."
+    "$GEN_INSTANCE" "$TEMP_FILE" 
     echo ""
 
     echo "🧹 Cleaning temp file: $TEMP_FILE"

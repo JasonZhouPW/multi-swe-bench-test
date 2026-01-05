@@ -275,6 +275,17 @@ class CliArgs:
         self._check_log_to_console()
         self._check_max_workers()
 
+        # Normalize `specifics` and `skips` to sets for consistent usage
+        if self.specifics is None:
+            self.specifics = set()
+        elif isinstance(self.specifics, (list, tuple)):
+            self.specifics = set(self.specifics)
+
+        if self.skips is None:
+            self.skips = set()
+        elif isinstance(self.skips, (list, tuple)):
+            self.skips = set(self.skips)
+
         if self.mode == "dataset":
             self._check_repo_dir()
             self._check_output_dir()
@@ -470,9 +481,15 @@ class CliArgs:
                 if repo not in self._repo_commits:
                     self._repo_commits[repo] = repo_commits
 
-                self._repo_commits[repo].commits[instance.pr.base.sha] = (
-                    instance.pr.number
-                )
+                # Primary key: base.sha
+                self._repo_commits[repo].commits[instance.pr.base.sha] = instance.pr.number
+
+                # Also record head.sha and merge_commit_sha as fallback candidates (if available)
+                if hasattr(instance.pr, "head") and instance.pr.head and getattr(instance.pr.head, "sha", None):
+                    self._repo_commits[repo].commits[instance.pr.head.sha] = instance.pr.number
+                if getattr(instance.pr, "merge_commit_sha", None):
+                    self._repo_commits[repo].commits[instance.pr.merge_commit_sha] = instance.pr.number
+
                 self._repo_commits[repo].skip_id.add(
                     f"{instance.pr.org}/{instance.pr.repo}:pr-{instance.pr.number}"
                 )
@@ -525,16 +542,45 @@ class CliArgs:
             is_clean, error_msg = git_util.is_clean(repo_dir)
             if not is_clean:
                 self.logger.error(error_msg)
-                self.skips.add(repo_commits.skip_id)
-                error_happened = True
-                continue
+                if self.skips is None:
+                    self.skips = set()
+                self.skips.update(repo_commits.skip_id)
 
             commit_hashes = git_util.get_all_commit_hashes(repo_dir, self.logger)
             if len(commit_hashes) == 0:
                 self.logger.error(f"No commit hashes found in {repo.repo_full_name}")
                 error_happened = True
-                self.skips.add(repo_commits.skip_id)
-                continue
+                if self.skips is None:
+                    self.skips = set()
+                self.skips.update(repo_commits.skip_id)
+            try:
+                import subprocess
+
+                self.logger.debug(f"Fetching updates for {repo.repo_full_name} to ensure commits are available")
+                subprocess.run([
+                    "git",
+                    "-C",
+                    str(repo_dir),
+                    "fetch",
+                    "--all",
+                    "--prune",
+                ], check=False)
+
+                # If repository is shallow, try to unshallow
+                if (repo_dir / ".git" / "shallow").exists():
+                    self.logger.debug(f"Repository appears shallow, attempting to unshallow: {repo.repo_full_name}")
+                    subprocess.run([
+                        "git",
+                        "-C",
+                        str(repo_dir),
+                        "fetch",
+                        "--unshallow",
+                    ], check=False)
+
+                # Recompute commit hashes after fetch
+                commit_hashes = git_util.get_all_commit_hashes(repo_dir, self.logger)
+            except Exception as e:
+                self.logger.warning(f"Failed to fetch history for {repo.repo_full_name}: {e}")
 
             for commit_hash, pr_number in tqdm(
                 repo_commits.commits.items(),
@@ -545,7 +591,10 @@ class CliArgs:
                         f"Commit hash not found in {repo.repo_full_name}:pr-{pr_number}: {commit_hash}"
                     )
                     error_happened = True
-                    self.skips.add(repo_commits.skip_id)
+                    if self.skips is None:
+                        self.skips = set()
+                    # merge the skip identifiers
+                    self.skips.update(repo_commits.skip_id)
 
         # if error_happened:
         #     raise ValueError("Check commit hashes failed, please check the logs.")
@@ -921,5 +970,6 @@ if __name__ == "__main__":
 
     parser = get_parser()
     args = parser.parse_args()
+    print("Arguments:", args)
     cli = CliArgs.from_dict(vars(args))
     cli.run()

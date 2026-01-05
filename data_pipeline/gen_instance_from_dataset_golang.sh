@@ -2,18 +2,18 @@
 set -euo pipefail
 
 RAW_JSON="$1"
-EXTRA_JSON="$2"   # 新增参数
+EXTRA_JSON="${2:-}"   # optional parameter
 
+echo "raw json:$RAW_JSON"
 if [ ! -f "$RAW_JSON" ]; then
     echo "❌ raw dataset not found: $RAW_JSON"
     exit 1
 fi
-
-if [ ! -f "$EXTRA_JSON" ]; then
-    echo "❌ extra JSON not found: $EXTRA_JSON"
-    exit 1
-fi
-
+# if [ ! -f "$EXTRA_JSON" ]; then
+#     echo "❌ extra JSON not found: $EXTRA_JSON"
+#     exit 1
+# fi
+echo "Extra JSON:$EXTRA_JSON"
 ###################################################
 # Extract fields (org/repo/lang)
 ###################################################
@@ -28,12 +28,20 @@ if [ -z "$LANG_RAW" ]; then
 fi
 
 LANG=$(echo "$LANG_RAW" | tr 'A-Z' 'a-z')
-
+echo "Detected language: $LANG"
 ########################################
 # Build setup_commands block
 ########################################
-ESCAPED_SETUP=$(jq -r '.setup_commands | join("\n")' "$EXTRA_JSON" | sed 's|[/&]|\\&|g')
-ESCAPED_SETUP=${ESCAPED_SETUP//$'\n'/\\n}
+if [ -n "$EXTRA_JSON" ] && [ -f "$EXTRA_JSON" ]; then
+    # Use empty array fallback to avoid errors when the field is missing
+    ESCAPED_SETUP=$(jq -r '(.setup_commands // []) | join("\n")' "$EXTRA_JSON" | sed 's|[/&]|\\&|g')
+    # Replace literal newlines with \n so the Python triple-quoted string preserves newlines when interpreted
+    ESCAPED_SETUP=${ESCAPED_SETUP//$'\n'/\\n}
+else
+    ESCAPED_SETUP=""
+fi
+
+echo "ESCAPED_SETUP: $ESCAPED_SETUP"
 
 ###################################################
 # Map language → folder
@@ -236,7 +244,7 @@ go test -v -count=1 ./... || true
 {self.global_env}
 
 {copy_cmds}
-
+RUN chmod +x /home/prepare.sh /home/run.sh /home/test-run.sh /home/fix-run.sh /home/check_git_changes.sh /home/resolve_go_file.sh
 RUN bash /home/prepare.sh
 
 {self.clear_env}
@@ -270,15 +278,22 @@ class InstanceTemplate(Instance):
     def parse_log(self, test_log: str) -> TestResult:
         passed, failed, skipped = set(), set(), set()
 
-        re_pass = re.compile(r"--- PASS: (\\S+)")
-        re_fail = re.compile(r"--- FAIL: (\\S+)")
-        re_skip = re.compile(r"--- SKIP: (\\S+)")
+        # Per-test lines
+        re_pass = re.compile(r"--- PASS: (\S+)")
+        re_fail = re.compile(r"--- FAIL: (\S+)")
+        re_skip = re.compile(r"--- SKIP: (\S+)")
+        # Package-level results (e.g. "ok  github.com/org/repo/pkg 0.003s" or "FAIL\tgithub.com/org/repo/pkg 0.003s")
+        re_pkg_ok = re.compile(r"^ok\s+(\S+)\b")
+        re_pkg_fail = re.compile(r"^FAIL\s+(\S+)\b")
 
         for line in test_log.splitlines():
             line = line.strip()
             if m := re_pass.match(line): passed.add(m.group(1))
             if m := re_fail.match(line): failed.add(m.group(1))
             if m := re_skip.match(line): skipped.add(m.group(1))
+            if m := re_pkg_fail.match(line):
+                pkg = m.group(1)
+                failed.add(f"pkg::{pkg}")
 
         return TestResult(
             passed_count=len(passed),
@@ -302,6 +317,7 @@ echo "✅ Injected setup commands from $EXTRA_JSON"
 # Inject org/repo into template
 ###################################################
 # Replace placeholder {{ORG}} {{REPO}}
+
 sed -i "" "s/{{ORG}}/$ORG/g"  "$TARGET_FILE" 2>/dev/null || sed -i "s/{{ORG}}/$ORG/g" "$TARGET_FILE"
 sed -i "" "s/{{REPO}}/$REPO/g" "$TARGET_FILE" 2>/dev/null || sed -i "s/{{REPO}}/$REPO/g" "$TARGET_FILE"
 

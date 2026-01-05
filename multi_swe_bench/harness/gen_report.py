@@ -384,6 +384,7 @@ class CliArgs:
             def safe_generate_report(task: ReportTask) -> Tuple[Report, bool] | None:
                 try:
                     report = task.generate_report(regen=self.regen)
+                    print(f"Generated report for {report}")
                     if not report.valid:
                         self.logger.error(
                             f"Invalid report for {task.id}, {report.short_report()}, {report.error_msg}"

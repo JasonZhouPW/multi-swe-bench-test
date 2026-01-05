@@ -223,6 +223,12 @@ def main() -> None:
         default="2024-11-28",
         help="Minimum creation date (default: 2024-11-28)",
     )
+    parser.add_argument(
+        "--exclude-repos",
+        type=str,
+        default=None,
+        help="Comma-separated list of repos to exclude (format: org/repo)",
+    )
     args = parser.parse_args()
 
     try:
@@ -233,6 +239,17 @@ def main() -> None:
         if not repositories:
             print("No valid repositories found in CSV")
             return
+
+        # Apply exclude_repos filter if provided (comma-separated org/repo)
+        if args.exclude_repos:
+            exclude_set = {r.strip() for r in args.exclude_repos.split(',') if r.strip()}
+            if exclude_set:
+                before = len(repositories)
+                repositories = [r for r in repositories if f"{r[0]}/{r[1]}" not in exclude_set]
+                print(f"Excluded {before - len(repositories)} repositories based on --exclude-repos")
+                if not repositories:
+                    print("No repositories left after applying --exclude-repos filter")
+                    return
 
         print(f"Processing {len(repositories)} repositories...")
         os.makedirs(args.out_dir, exist_ok=True)

@@ -5,10 +5,10 @@ set -e  # 一旦有命令出错就退出
 # 默认值（如需更改，可使用 -o/-l/-s/-n/-t 参数）
 # OUTPUT_DIR="data/raw_datasets/catchorg__Catch6"
 LANGUAGE="Go"
-MIN_STARS=100000
-MAX_RESULTS=20
+# MIN_STARS=100000
+# MAX_RESULTS=2
 TOKEN="./tokens.txt"  # 默认 token 文件路径，或直接填写 token 字符串，如 "ghp_xxx"
-PERCENTAGE=80.0
+# PERCENTAGE=70.0
 # 其他默认参数（通常无需修改）
 MAX_WORKERS=50
 DISTRIBUTE="round"
@@ -18,31 +18,29 @@ RETRY_ATTEMPTS=8
 CREATED_AT="2025-01-01" # default value
 TODAY="$(date '+%Y-%m-%d')"
 
-KEY_WORDS="fix"
-OUTPUT_DIR="data/raw_datasets/${TODAY}"
+KEY_WORDS=""
+OUTPUT_DIR="data/raw_datasets/${TODAY}_${LANGUAGE}"
 
 
 # Usage/help
 usage() {
-    echo "Usage: $0 [-o output_dir] [-l language] [-s min_stars] [-n max_results] [-t token] [-e exclude_repos]"
+    echo "Usage: $0 [-o output_dir] [-t token] [-r org/repo]"
     echo "  -o output_dir   Output directory for raw datasets (default: $OUTPUT_DIR)"
     echo "  -l language     Language filter (default: $LANGUAGE)"
-    echo "  -s min_stars    Minimum stars filter (default: $MIN_STARS)"
-    echo "  -n max_results  Max repos to fetch (default: $MAX_RESULTS)"
     echo "  -t token        GitHub token (default: value in script)"
-    echo "  -e exclude_repos Comma-separated list of repos to exclude (format: org/repo)"
+    echo "  -r org/repo     Comma-separated list of specific repos to process (format: org/repo)"
     exit 1
 }
 
 # Parse command-line options
-while getopts ":o:l:s:n:t:e:h" opt; do
+while getopts ":o:l:s:n:t:r:h" opt; do
   case $opt in
     o) OUTPUT_DIR="$OPTARG" ;;
     l) LANGUAGE="$OPTARG" ;;
-    s) MIN_STARS="$OPTARG" ;;
-    n) MAX_RESULTS="$OPTARG" ;;
+    # s) MIN_STARS="$OPTARG" ;;
+    # n) MAX_RESULTS="$OPTARG" ;;
     t) TOKEN="$OPTARG" ;;
-    e) EXCLUDE_REPOS="$OPTARG" ;;
+    r) REPOS="$OPTARG" ;;
     h) usage ;;
     \?) echo "Invalid option: -$OPTARG" >&2; usage ;;
     :) echo "Option -$OPTARG requires an argument." >&2; usage ;;
@@ -54,9 +52,9 @@ shift $((OPTIND -1))
 echo "Configuration:"
 echo "  OUTPUT_DIR = $OUTPUT_DIR"
 echo "  LANGUAGE   = $LANGUAGE"
-echo "  MIN_STARS  = $MIN_STARS"
-echo "  MAX_RESULTS= $MAX_RESULTS"
-echo "  EXCLUDE_REPOS = ${EXCLUDE_REPOS:-<none>}"
+# echo "  MIN_STARS  = $MIN_STARS"
+# echo "  MAX_RESULTS= $MAX_RESULTS"
+echo "  REPOS = ${REPOS:-<none>}"
 
 # 如果未通过 -t 提供 token，尝试从常见环境变量读取
 if [ "$TOKEN" = "xxxxx" ] || [ -z "$TOKEN" ]; then
@@ -106,34 +104,34 @@ echo "Using interpreter: $PYTHON_CMD ($($PYTHON_CMD -V 2>&1))"
 
 # 第一步：爬取 GitHub 仓库
 echo "Step 1: Crawl GitHub repos..."
-$PYTHON_CMD -m multi_swe_bench.collect.crawl_repos \
-    --output_dir "$OUTPUT_DIR" \
-    --language "$LANGUAGE" \
-    --min_stars "$MIN_STARS" \
-    --max_results "$MAX_RESULTS" \
-    --token "$TOKEN"
+# splidt REPOS into array ,write to csv file $OUTPUT_DIR/filtered_repos.csv
+if [ -n "${REPOS:-}" ]; then
+    echo "Processing specific repos: $REPOS"
+    IFS=',' read -r -a REPO_ARRAY <<< "$REPOS"
+    mkdir -p "$OUTPUT_DIR"
+    FILTERED_CSV="$OUTPUT_DIR/filtered_repos.csv"
+    echo "Rank,Name,Stars,Forks,Description,URL,Last Updated" > "$FILTERED_CSV"
+    RANK=1
+    for repo in "${REPO_ARRAY[@]}"; do
+        ORG_NAME=$(echo "$repo" | cut -d'/' -f1)
+        REPO_NAME=$(echo "$repo" | cut -d'/' -f2)
+        Stars=0
+        Forks=0
+        DESCRIPTION=""
+        URL="https://api.github.com/repos/$ORG_NAME/$REPO_NAME"
+        LAST_UPDATED=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+        echo "$RANK,$ORG_NAME/$REPO_NAME,$Stars,$Forks,\"${DESCRIPTION}\",$URL,$LAST_UPDATED" >> "$FILTERED_CSV"
+        RANK=$((RANK + 1))
+    done
+    CSV_FILE="$FILTERED_CSV"
+else
+    echo "Crawling repos for language: $LANGUAGE"
+fi
 
-# 找到刚生成的 CSV 文件
-CSV_FILE=$(ls -t "$OUTPUT_DIR"/github_${LANGUAGE}_repos_*.csv | head -n 1)
-echo "Generated CSV file: $CSV_FILE"
-
-echo "Step 1.1: Filter repos..."
-$PYTHON_CMD -m multi_swe_bench.collect.filter_repo \
-    --input_file "$CSV_FILE" \
-    --output_file "$OUTPUT_DIR/filtered_repos_$LANGUAGE.csv" \
-    --tokens_file "./tokens.txt" \
-    --min_total_pr_issues 200 \
-    --min_forks 200 \
-    --language "$LANGUAGE" \
-    --min_lang_percent "$PERCENTAGE" \
-    --max_workers 10 \
-    --exclude_repos "$EXCLUDE_REPOS"
-# 更新 CSV_FILE 为过滤后的文件
-CSV_FILE="$OUTPUT_DIR/filtered_repos_$LANGUAGE.csv"
 echo "Filtered CSV file: $CSV_FILE"
 
 # 第二步：从仓库获取数据
-echo "Step 2: Get data from repos..."
+# echo "Step 2: Get data from repos..."
 $PYTHON_CMD -m multi_swe_bench.collect.get_from_repos_pipeline \
     --csv_file "$CSV_FILE" \
     --out_dir "$OUTPUT_DIR" \
@@ -144,15 +142,6 @@ $PYTHON_CMD -m multi_swe_bench.collect.get_from_repos_pipeline \
     --key_words "$KEY_WORDS" \
     --created_at "$CREATED_AT" \
     --token "$TOKEN" \
-    --exclude-repos "$EXCLUDE_REPOS"
+    # --exclude-repos "$EXCLUDE_REPOS"
 
 echo "All done!"
-
-# 如果在out_dir下存在*_raw_dataset.jsonl文件并且文件size大于0，将其拷贝到上层的raw_datasets目录下
-RAW_DATASET_FILES=("$OUTPUT_DIR"/*_raw_dataset.jsonl)
-for file in "${RAW_DATASET_FILES[@]}"; do
-    if [ -f "$file" ] && [ -s "$file" ]; then
-        cp "$file" "data/raw_datasets/"
-        echo "Copied $file to data/raw_datasets/"
-    fi
-done

@@ -4,7 +4,7 @@ set -euo pipefail
 WORK_DIR="${1:?usage: $0 <work-dir> [jsonl_path]}"
 JSONL="${2:-$WORK_DIR/extracted_ds.jsonl}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-CFG="$SCRIPT_DIR/config.yaml"
+CFG="$SCRIPT_DIR/sweagent.yaml"
 GITHUB_DIR="$WORK_DIR/github"
 PATCH_DIR="$WORK_DIR/patches"
 
@@ -46,7 +46,6 @@ if command -v jq >/dev/null 2>&1; then
     rm -f "$log_file"
   done
 else
-  echo "22222"
   while IFS= read -r line; do
     [ -n "$line" ] || continue
     printf '%s' "$line" | grep -q '"issue_url"' || continue
