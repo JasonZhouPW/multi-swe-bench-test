@@ -56,7 +56,7 @@ if __name__ == "__main__":
     try:
         # Example 1: Search without keyword (get all merged PRs)
         print("=== Example 1: Get all merged PRs ===")
-        tk = "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"
+        tk = ""
         pull_requests = get_merged_pulls("fatedier", "frp", tk)
         print(f"Found {len(pull_requests)} merged pull requests.")
         
