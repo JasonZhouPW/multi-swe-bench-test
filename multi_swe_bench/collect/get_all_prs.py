@@ -125,16 +125,16 @@ def main(tokens: list[str], out_dir: Path, org: str, repo: str, created_at: str 
             # -------------------------------
             m = pull.is_merged()
             if not m:
-                # print(f"Skipping PR #{pull.number} not merged")
+                print(f"Skipping PR #{pull.number} not merged")
                 continue
             if filter_dt is not None and filter_dt != "" and pull.created_at <= filter_dt:
-                # print(f"Skipping PR #{pull.number} created at {pull.created_at} ,required after {filter_dt}")
+                print(f"Skipping PR #{pull.number} created at {pull.created_at} ,required after {filter_dt}")
                 continue
              # ⭐ 在这里做你要的过滤
             if key_words is not None and key_words != "" and not is_relevant_pull(pull,key_words):
-                # print(f"Skipping PR #{pull.number} not matching keywords")
+                print(f"Skipping PR #{pull.number} not matching keywords")
                 continue
-            # print(f"Get PR #{pull.number} created at {pull.created_at} keywords {key_words} matched")
+            print(f"Get PR #{pull.number} created at {pull.created_at} keywords {key_words} matched")
             file.write(
                 json.dumps(
                     {
