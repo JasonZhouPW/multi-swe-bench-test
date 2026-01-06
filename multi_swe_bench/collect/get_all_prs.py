@@ -72,8 +72,15 @@ def is_relevant_pull(pull, key_words: str = None) -> bool:
     else:
         keywords = default_keywords
 
+    # print(f"=== Using keywords for filtering: {keywords}")
     # rule 2: labels contain keywords
+    # if any(k in label for label in labels for k in keywords):
+    #     return True
     if any(k in label for label in labels for k in keywords):
+        return True
+    if any(k in title for k in keywords):
+        return True
+    if pull.body and any(k in pull.body.lower() for k in keywords):
         return True
 
     return False
@@ -102,6 +109,7 @@ def main(tokens: list[str], out_dir: Path, org: str, repo: str, created_at: str 
         filter_dt = dt
 
     g = get_github(random.choice(tokens))
+    print("org and repo:", org, repo)
     r = g.get_repo(f"{org}/{repo}")
 
     def datetime_serializer(obj):
@@ -115,8 +123,12 @@ def main(tokens: list[str], out_dir: Path, org: str, repo: str, created_at: str 
             # -------------------------------
             # ⭐ 关键过滤逻辑：只保留 created_at > filter_dt 的 PR
             # -------------------------------
+            m = pull.is_merged()
+            if not m:
+                # print(f"Skipping PR #{pull.number} not merged")
+                continue
             if filter_dt is not None and filter_dt != "" and pull.created_at <= filter_dt:
-                # print(f"Skipping PR #{pull.number} created at {pull.created_at}")
+                # print(f"Skipping PR #{pull.number} created at {pull.created_at} ,required after {filter_dt}")
                 continue
              # ⭐ 在这里做你要的过滤
             if key_words is not None and key_words != "" and not is_relevant_pull(pull,key_words):

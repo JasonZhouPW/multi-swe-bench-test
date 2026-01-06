@@ -141,6 +141,8 @@ def main(tokens: list[str], out_dir: Path, prs_file: Path, skip_commit_message: 
 
         for pull in tqdm(prs, desc="Pull Requests"):
             if pull["state"] != "closed" or pull["merged_at"] is None:
+                # print("state:", pull["state"], "merged_at:", pull["merged_at"])
+                # print("Skipping non-merged PR")
                 continue
 
             pull["commits"] = []
@@ -157,6 +159,7 @@ def main(tokens: list[str], out_dir: Path, prs_file: Path, skip_commit_message: 
 
             resolved_issues = extract_resolved_issues(pull)
             if len(resolved_issues) == 0:
+                # print("Skipping PR with no resolved issues")
                 continue
 
             pull["resolved_issues"] = resolved_issues
