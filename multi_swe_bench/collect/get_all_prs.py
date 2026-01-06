@@ -138,9 +138,18 @@ def main(tokens: list[str], out_dir: Path, org: str, repo: str, created_at: str 
     with open(out_dir / f"{org}__{repo}_prs.jsonl", "w", encoding="utf-8") as file:
         # Use the Search API to fetch merged PRs with optional merged date filter
         headers = {"Accept": "application/vnd.github.v3+json", "Authorization": f"token {tk}"}
-        query = f"repo:{org}/{repo} is:pr is:merged"
+        # query = f"repo:{org}/{repo} is:pr is:merged"
+        base_query_parts = [f"repo:{org}/{repo}", "is:pr", "is:merged"]
+
         if merged_after:
-            query += f" merged:>={merged_after}"
+            base_query_parts.append(f" merged:>={merged_after}")
+            # query += f" merged:>={merged_after}"
+        if key_words is not None and key_words != "":
+            for kw in key_words.split(","):
+                kw_clean = kw.strip()
+                if kw_clean:
+                    base_query_parts.append(f'"{kw_clean}"')
+        query = " ".join(base_query_parts)            
         # You can also include created_at in the query if desired, but we'll keep created_at as a secondary filter
         base_url = f"https://api.github.com/search/issues?q={query}&sort=updated&order=desc&per_page=100"
 
@@ -177,9 +186,9 @@ def main(tokens: list[str], out_dir: Path, org: str, repo: str, created_at: str 
                 #         continue
 
                 # keyword filtering (existing behavior)
-                if key_words is not None and key_words != "" and not is_relevant_pull(pull, key_words):
-                    print(f"Skipping PR #{pull.number} not matching keywords")
-                    continue
+                # if key_words is not None and key_words != "" and not is_relevant_pull(pull, key_words):
+                #     print(f"Skipping PR #{pull.number} not matching keywords")
+                #     continue
 
                 print(f"Get PR #{pull.number} created at {pull.created_at} merged at {pull.merged_at} keywords {key_words} matched")
                 file.write(
