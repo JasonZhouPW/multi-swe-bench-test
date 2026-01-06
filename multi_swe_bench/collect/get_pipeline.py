@@ -76,7 +76,7 @@ def run_pipeline(
     out_dir.mkdir(parents=True, exist_ok=True)
 
     print("\n=== Step 1: Fetch all PRs ===")
-    get_all_prs(tokens, out_dir, org, repo,created_at,key_words)
+    get_all_prs(tokens, out_dir, org, repo,created_at,key_words,created_at)
  
     print("\n=== Step 2: Filter PRs ===")
     pull_file = out_dir / f"{org}__{repo}_prs.jsonl"
