@@ -107,11 +107,13 @@ def main(tokens: list[str], out_dir: Path, org: str, repo: str, created_at: str 
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
         filter_dt = dt
-
-    g = get_github(random.choice(tokens))
+    print("token:", tokens)    
+    tk = random.choice(tokens)
+    print("Using token:", tk)
+    g = get_github(tk)
     print("org and repo:", org, repo)
     r = g.get_repo(f"{org}/{repo}")
-
+    print(f"Repository {org}/{repo} found.")
     def datetime_serializer(obj):
         if isinstance(obj, datetime):
             return obj.isoformat()

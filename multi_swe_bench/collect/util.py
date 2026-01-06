@@ -20,17 +20,38 @@ from pathlib import Path
 def parse_tokens(tokens: str | list[str] | Path) -> list[str]:
     """
     Try to parse tokens as a list of strings.
+
+    Supported input formats:
+    - list[str]: returned unchanged
+    - comma-separated string: "tok1,tok2"
+    - file path string or Path: read non-empty lines from the file
+    - single token string: returned as a single-element list
     """
 
     if isinstance(tokens, list):
         return tokens
-    elif isinstance(tokens, str):
-        return [tokens]
-    elif isinstance(tokens, Path):
+
+    # If a Path object is provided, read non-empty lines
+    if isinstance(tokens, Path):
         if not tokens.exists() or not tokens.is_file():
             raise ValueError(f"Token file {tokens} does not exist or is not a file.")
         with tokens.open("r", encoding="utf-8") as file:
             return [line.strip() for line in file if line.strip()]
+
+    # Handle strings
+    if isinstance(tokens, str):
+        s = tokens.strip()
+        # Comma-separated list
+        if "," in s:
+            return [t.strip() for t in s.split(",") if t.strip()]
+        # String that looks like a path to an existing file
+        p = Path(s)
+        if p.exists() and p.is_file():
+            with p.open("r", encoding="utf-8") as file:
+                return [line.strip() for line in file if line.strip()]
+        # Single token string
+        return [s]
+
     return []
 
 
