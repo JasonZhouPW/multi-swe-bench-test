@@ -56,8 +56,12 @@ def get_tokens(tokens) -> list[str]:
             sys.exit(1)
         tokens = default_token_file
     else:
+        ## if tokensstr contains ',', split it
+        if isinstance(tokens, str) and ',' in tokens:
+            tokens = tokens.split(',')
         # If tokens are provided as a list, they might need conversion
-        tokens = tokens[0] if len(tokens) == 1 else tokens
+        else:
+            tokens = tokens[0] if len(tokens) == 1 else tokens
 
     try:
         token_list = parse_tokens(tokens)

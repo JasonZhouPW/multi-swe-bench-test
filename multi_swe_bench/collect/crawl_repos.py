@@ -54,7 +54,7 @@ class GitHubScraper:
         headers: Dict[str, str] = {"Accept": "application/vnd.github.v3+json"}
         if token:
             headers["Authorization"] = f"token {token}"
-
+        print("headers:", headers)
         all_repositories: List[Dict[str, Any]] = []
         remaining_results: int = max_results
         page: int = 1
@@ -248,6 +248,7 @@ def main() -> None:
 
     scraper = GitHubScraper()
     token = random.choice(get_tokens(args.token))
+    print("Using token:", token)
     scraper.fetch_repositories(
         language=args.language,
         min_stars=args.min_stars,
