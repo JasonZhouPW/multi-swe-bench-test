@@ -18,8 +18,8 @@ RETRY_ATTEMPTS=8
 CREATED_AT="2025-01-01" # default value
 TODAY="$(date '+%Y-%m-%d')"
 
-KEY_WORDS="fix"
-OUTPUT_DIR="data/raw_datasets/${TODAY}"
+KEY_WORDS="refactor"
+OUTPUT_DIR="data/raw_datasets/${TODAY}/${KEY_WORDS}"
 
 
 # Usage/help
@@ -148,11 +148,12 @@ $PYTHON_CMD -m multi_swe_bench.collect.get_from_repos_pipeline \
 
 echo "All done!"
 
+# move to copy_raw_dataset.sh
 # 如果在out_dir下存在*_raw_dataset.jsonl文件并且文件size大于0，将其拷贝到上层的raw_datasets目录下
-RAW_DATASET_FILES=("$OUTPUT_DIR"/*_raw_dataset.jsonl)
-for file in "${RAW_DATASET_FILES[@]}"; do
-    if [ -f "$file" ] && [ -s "$file" ]; then
-        cp "$file" "data/raw_datasets/"
-        echo "Copied $file to data/raw_datasets/"
-    fi
-done
+# RAW_DATASET_FILES=("$OUTPUT_DIR"/*_raw_dataset.jsonl)
+# for file in "${RAW_DATASET_FILES[@]}"; do
+#     if [ -f "$file" ] && [ -s "$file" ]; then
+#         cp "$file" "data/raw_datasets/"
+#         echo "Copied $file to data/raw_datasets/"
+#     fi
+# done

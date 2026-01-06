@@ -38,6 +38,10 @@ def process_repository(
     """Process a single repository using the get_pipeline logic directly"""
     dir_name = f"{org}__{repo}".replace("/", "__")
     out_dir = os.path.join(out_base_dir, dir_name)
+    # if out_dir exists and is non-empty, skip processing
+    if os.path.exists(out_dir) and os.listdir(out_dir):
+        print(f"Skipping existing non-empty directory: {out_dir}")
+        return True
     os.makedirs(out_dir, exist_ok=True)
 
     try:
