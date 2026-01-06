@@ -152,7 +152,7 @@ async def filter_repo(
         progress.update(task_id, advance=1)
         return None
 
-    print(f"langs_data: {langs_data} for repo {full_name}")
+    # print(f"langs_data: {langs_data} for repo {full_name}")
     total_bytes = sum(langs_data.values())
 
     target_bytes = langs_data.get(fix_lang_name(criteria["language"]), 0)
