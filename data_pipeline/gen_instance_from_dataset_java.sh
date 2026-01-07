@@ -313,26 +313,29 @@ class InstanceTemplate(Instance):
         return cmd or "bash /home/fix-run.sh"
 
     def parse_log(self, test_log: str) -> TestResult:
+        import re as _re
+
         passed_tests = set()
         failed_tests = set()
         skipped_tests = set()
 
+        # Remove ANSI color codes
+        ansi_escape = _re.compile(r'\x1b\[[0-9;]*m')
+        clean_log = ansi_escape.sub('', test_log)
+
         re_pass_tests = [
-            # re.compile(
-            #     r"Running (.+?)\nTests run: (\d+), Failures: (\d+), Errors: (\d+), Skipped: (\d+), Time elapsed: [\d\.]+ sec",
-            # ),
-            re.compile(
-                r"Running\s+(.+?)\s*\n(?:(?!Tests run:).*\n)*Tests run:\s*(\d+),\s*Failures:\s*(\d+),\s*Errors:\s*(\d+),\s*Skipped:\s*(\d+),\s*Time elapsed:\s*[\d.]+\s*sec"
+            _re.compile(
+                r"\[INFO\]\s+Running\s+(.+?)\s*\n.*?INFO.*?Tests run:\s*(\d+),\s*Failures:\s*(\d+),\s*Errors:\s*(\d+),\s*Skipped:\s*(\d+),\s*Time elapsed:\s*[\d.]+\s*s"
             )
         ]
         re_fail_tests = [
-            re.compile(
-                r"Running (.+?)\nTests run: (\d+), Failures: (\d+), Errors: (\d+), Skipped: (\d+), Time elapsed: [\d\.]+ sec +<<< FAILURE!"
+            _re.compile(
+                r"\[INFO\]\s+Running\s+(.+?)\s*\n.*?INFO.*?Tests run:\s*(\d+),\s*Failures:\s*(\d+),\s*Errors:\s*(\d+),\s*Skipped:\s*(\d+),\s*Time elapsed:\s*[\d.]+\s*s\s+<<<\s*FAILURE!"
             )
         ]
 
         for re_pass_test in re_pass_tests:
-            tests = re_pass_test.findall(test_log, re.MULTILINE)
+            tests = re_pass_test.findall(clean_log, _re.MULTILINE | _re.DOTALL)
             for test in tests:
                 test_name = test[0]
                 tests_run = int(test[1])
@@ -352,7 +355,7 @@ class InstanceTemplate(Instance):
                     skipped_tests.add(test_name)
 
         for re_fail_test in re_fail_tests:
-            tests = re_fail_test.findall(test_log, re.MULTILINE)
+            tests = re_fail_test.findall(clean_log, _re.MULTILINE | _re.DOTALL)
             for test in tests:
                 test_name = test[0]
                 failed_tests.add(test_name)
