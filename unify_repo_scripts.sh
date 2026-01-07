@@ -65,7 +65,7 @@ for RAW_FILE in "${FILES[@]}"; do
     LINE=$(head -n 1 "$RAW_FILE")
     LANG_RAW=$(echo "$LINE" | sed -n 's/.*"language": *"\([^"]*\)".*/\1/p')
     LANG_RAW=$(echo "$LANG_RAW" | tr 'A-Z' 'a-z')
-    if [ "$LANG_RAW" == "Go" ]; then
+    if [ "$LANG_RAW" == "go" ]; then
         LANG_RAW="golang"
     fi
 
