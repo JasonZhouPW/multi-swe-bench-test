@@ -2,17 +2,17 @@
 set -euo pipefail
 
 RAW_JSON="$1"
-EXTRA_JSON="$2"   # 新增参数
+EXTRA_JSON="${2:-}"   # optional parameter
 
 if [ ! -f "$RAW_JSON" ]; then
     echo "❌ raw dataset not found: $RAW_JSON"
     exit 1
 fi
 
-if [ ! -f "$EXTRA_JSON" ]; then
-    echo "❌ extra JSON not found: $EXTRA_JSON"
-    exit 1
-fi
+# if [ ! -f "$EXTRA_JSON" ]; then
+#     echo "❌ extra JSON not found: $EXTRA_JSON"
+#     exit 1
+# fi
 
 ###################################################
 # Extract fields (org/repo/lang)
@@ -28,12 +28,24 @@ if [ -z "$LANG_RAW" ]; then
 fi
 
 LANG=$(echo "$LANG_RAW" | tr 'A-Z' 'a-z')
+# change LANG to lowercase
+
+
+
 
 ########################################
 # Build setup_commands block
 ########################################
-ESCAPED_SETUP=$(jq -r '.setup_commands | join("\n")' "$EXTRA_JSON" | sed 's|[/&]|\\&|g')
-ESCAPED_SETUP=${ESCAPED_SETUP//$'\n'/\\n}
+# ESCAPED_SETUP=$(jq -r '.setup_commands | join("\n")' "$EXTRA_JSON" | sed 's|[/&]|\\&|g')
+# ESCAPED_SETUP=${ESCAPED_SETUP//$'\n'/\\n}
+if [ -n "$EXTRA_JSON" ] && [ -f "$EXTRA_JSON" ]; then
+    # Use empty array fallback to avoid errors when the field is missing
+    ESCAPED_SETUP=$(jq -r '(.setup_commands // []) | join("\n")' "$EXTRA_JSON" | sed 's|[/&]|\\&|g')
+    # Replace literal newlines with \n so the Python triple-quoted string preserves newlines when interpreted
+    ESCAPED_SETUP=${ESCAPED_SETUP//$'\n'/\\n}
+else
+    ESCAPED_SETUP=""
+fi
 
 ###################################################
 # Map language → folder

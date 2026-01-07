@@ -2,17 +2,17 @@
 set -euo pipefail
 
 RAW_JSON="$1"
-EXTRA_JSON="$2"   # 新增参数
+EXTRA_JSON="${2:-}"   # optional parameter
 
 if [ ! -f "$RAW_JSON" ]; then
     echo "❌ raw dataset not found: $RAW_JSON"
     exit 1
 fi
 
-if [ ! -f "$EXTRA_JSON" ]; then
-    echo "❌ extra JSON not found: $EXTRA_JSON"
-    exit 1
-fi
+# if [ ! -f "$EXTRA_JSON" ]; then
+#     echo "❌ extra JSON not found: $EXTRA_JSON"
+#     exit 1
+# fi
 
 ###################################################
 # Extract fields

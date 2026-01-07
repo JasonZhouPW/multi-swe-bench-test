@@ -82,7 +82,7 @@ for RAW_FILE in "${FILES[@]}"; do
     echo ""
 
     echo "🧬 Step 3: gen_instance_from_dataset_$LANG_RAW.sh..."
-    "$GEN_INSTANCE" "$TEMP_FILE" "./repolaunch/data/setup.jsonl"
+    "$GEN_INSTANCE" "$TEMP_FILE" 
     echo ""
 
     echo "🧹 Cleaning temp file: $TEMP_FILE"
