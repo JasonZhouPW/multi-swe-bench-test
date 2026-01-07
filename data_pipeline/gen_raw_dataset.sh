@@ -6,7 +6,7 @@ set -e  # 一旦有命令出错就退出
 # OUTPUT_DIR="data/raw_datasets/catchorg__Catch6"
 LANGUAGE="Go"
 MIN_STARS=100000
-MAX_RESULTS=20
+MAX_RESULTS=200
 TOKEN="./tokens.txt"  # 默认 token 文件路径，或直接填写 token 字符串，如 "ghp_xxx"
 PERCENTAGE=80.0
 # 其他默认参数（通常无需修改）

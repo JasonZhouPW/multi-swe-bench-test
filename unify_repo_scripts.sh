@@ -44,6 +44,8 @@ fi
 
 LINE=$(head -n 1 "$INPUT")
 LANG_RAW=$(echo "$LINE" | sed -n 's/.*"language": *"\([^"]*\)".*/\1/p')
+LANG_RAW=$(echo "$LANG_RAW" | tr 'A-Z' 'a-z')
+
 echo "🔍 Detected language: $LANG_RAW"
 if [ -z "$LANG_RAW" ]; then
     LANG_RAW="java"
@@ -79,7 +81,7 @@ for RAW_FILE in "${FILES[@]}"; do
     "$CREATE_ORG_DIR" "$TEMP_FILE"
     echo ""
 
-    echo "🧬 Step 3: gen_instance_from_dataset_golang.sh..."
+    echo "🧬 Step 3: gen_instance_from_dataset_$LANG_RAW.sh..."
     "$GEN_INSTANCE" "$TEMP_FILE" "./repolaunch/data/setup.jsonl"
     echo ""
 
