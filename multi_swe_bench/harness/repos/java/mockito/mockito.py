@@ -1,5 +1,4 @@
 import re
-import textwrap
 from typing import Optional, Union
 
 from multi_swe_bench.harness.image import Config, File, Image
@@ -7,7 +6,7 @@ from multi_swe_bench.harness.instance import Instance, TestResult
 from multi_swe_bench.harness.pull_request import PullRequest
 
 
-class MockitoImageBase(Image):
+class ImageBase(Image):
     def __init__(self, pr: PullRequest, config: Config):
         self._pr = pr
         self._config = config
@@ -21,7 +20,7 @@ class MockitoImageBase(Image):
         return self._config
 
     def dependency(self) -> Union[str, "Image"]:
-        return "ubuntu:latest"
+        return "ubuntu:22.04"
 
     def image_tag(self) -> str:
         return "base"
@@ -42,36 +41,24 @@ class MockitoImageBase(Image):
         else:
             code = f"COPY {self.pr.repo} /home/{self.pr.repo}"
 
-        copy_commands = ""
-        for file in self.files():
-            copy_commands += f"COPY {file.name} /home/\n"
-
         return f"""FROM {image_name}
 
 {self.global_env}
 
-ENV JAVA_TOOL_OPTIONS="-Dfile.encoding=UTF-8 -Duser.timezone=Asia/Shanghai"
 ENV DEBIAN_FRONTEND=noninteractive
 ENV LANG=C.UTF-8
 ENV LC_ALL=C.UTF-8
-
 WORKDIR /home/
-
-RUN apt update && apt install -y gnupg ca-certificates git curl
-RUN curl -s https://repos.azul.com/azul-repo.key | gpg --dearmor -o /usr/share/keyrings/azul.gpg \
-    && echo "deb [signed-by=/usr/share/keyrings/azul.gpg] https://repos.azul.com/zulu/deb stable main" | tee /etc/apt/sources.list.d/zulu.list
-RUN apt update && apt install -y zulu21-jdk
-
+RUN apt-get update && apt-get install -y git openjdk-11-jdk
+RUN apt-get install -y maven
 {code}
-
-{copy_commands}
 
 {self.clear_env}
 
 """
 
 
-class MockitoImageDefault(Image):
+class ImageDefault(Image):
     def __init__(self, pr: PullRequest, config: Config):
         self._pr = pr
         self._config = config
@@ -85,7 +72,7 @@ class MockitoImageDefault(Image):
         return self._config
 
     def dependency(self) -> Image | None:
-        return MockitoImageBase(self.pr, self._config)
+        return ImageBase(self.pr, self.config)
 
     def image_tag(self) -> str:
         return f"pr-{self.pr.number}"
@@ -138,8 +125,10 @@ bash /home/check_git_changes.sh
 git checkout {pr.base.sha}
 bash /home/check_git_changes.sh
 
-./gradlew build || true
+# Injected setup commands
 
+
+mvn clean test -Dmaven.test.skip=false -DfailIfNoTests=false || true
 """.format(pr=self.pr),
             ),
             File(
@@ -149,8 +138,7 @@ bash /home/check_git_changes.sh
 set -e
 
 cd /home/{pr.repo}
-./gradlew test
-
+mvn clean test -Dmaven.test.skip=false -DfailIfNoTests=false
 """.format(pr=self.pr),
             ),
             File(
@@ -160,8 +148,8 @@ cd /home/{pr.repo}
 set -e
 
 cd /home/{pr.repo}
-git apply /home/test.patch
-./gradlew test
+git apply --whitespace=nowarn /home/test.patch
+mvn clean test -Dmaven.test.skip=false -DfailIfNoTests=false
 
 """.format(pr=self.pr),
             ),
@@ -172,72 +160,27 @@ git apply /home/test.patch
 set -e
 
 cd /home/{pr.repo}
-git apply /home/test.patch /home/fix.patch
-./gradlew test
+git apply --whitespace=nowarn /home/test.patch /home/fix.patch
+mvn clean test -Dmaven.test.skip=false -DfailIfNoTests=false
 
 """.format(pr=self.pr),
             ),
         ]
 
     def dockerfile(self) -> str:
-        image = self.dependency()
-        name = image.image_name()
-        tag = image.image_tag()
+        parent = self.dependency()
+        name = parent.image_name()
+        tag = parent.image_tag()
 
-        copy_commands = ""
-        for file in self.files():
-            copy_commands += f"COPY {file.name} /home/\n"
+        copy_cmds = "".join([f"COPY {f.name} /home/\n" for f in self.files()])
 
-        prepare_commands = "RUN bash /home/prepare.sh"
-
-        proxy_setup = ""
-        proxy_cleanup = ""
-        if self.global_env:
-            proxy_host = None
-            proxy_port = None
-
-            for line in self.global_env.splitlines():
-                match = re.match(
-                    r"^ENV\s*(http[s]?_proxy)=http[s]?://([^:]+):(\d+)", line
-                )
-                if match:
-                    proxy_host = match.group(2)
-                    proxy_port = match.group(3)
-                    break
-            if proxy_host and proxy_port:
-                proxy_setup = textwrap.dedent(
-                    f"""
-                    RUN mkdir -p ~/.gradle && \\
-                        if [ ! -f "$HOME/.gradle/gradle.properties" ]; then \\
-                            touch "$HOME/.gradle/gradle.properties"; \\
-                        fi && \\
-                        if ! grep -q "systemProp.http.proxyHost" "$HOME/.gradle/gradle.properties"; then \\
-                            echo 'systemProp.http.proxyHost={proxy_host}' >> "$HOME/.gradle/gradle.properties" && \\
-                            echo 'systemProp.http.proxyPort={proxy_port}' >> "$HOME/.gradle/gradle.properties" && \\
-                            echo 'systemProp.https.proxyHost={proxy_host}' >> "$HOME/.gradle/gradle.properties" && \\
-                            echo 'systemProp.https.proxyPort={proxy_port}' >> "$HOME/.gradle/gradle.properties"; \\
-                        fi && \\
-                        echo 'export GRADLE_USER_HOME=/root/.gradle' >> ~/.bashrc && \\
-                        /bin/bash -c "source ~/.bashrc"
-                """
-                )
-
-                proxy_cleanup = textwrap.dedent(
-                    """
-                    RUN rm -f ~/.gradle/gradle.properties
-                """
-                )
         return f"""FROM {name}:{tag}
 
 {self.global_env}
 
-{proxy_setup}
+{copy_cmds}
 
-{copy_commands}
-
-{prepare_commands}
-
-{proxy_cleanup}
+RUN bash /home/prepare.sh
 
 {self.clear_env}
 
@@ -245,7 +188,7 @@ git apply /home/test.patch /home/fix.patch
 
 
 @Instance.register("mockito", "mockito")
-class Mockito(Instance):
+class InstanceTemplate(Instance):
     def __init__(self, pr: PullRequest, config: Config, *args, **kwargs):
         super().__init__()
         self._pr = pr
@@ -256,65 +199,64 @@ class Mockito(Instance):
         return self._pr
 
     def dependency(self) -> Optional[Image]:
-        return MockitoImageDefault(self.pr, self._config)
+        return ImageDefault(self.pr, self._config)
 
-    def run(self, run_cmd: str = "") -> str:
-        if run_cmd:
-            return run_cmd
+    def run(self, cmd: str = "") -> str:
+        return cmd or "bash /home/run.sh"
 
-        return "bash /home/run.sh"
+    def test_patch_run(self, cmd: str = "") -> str:
+        return cmd or "bash /home/test-run.sh"
 
-    def test_patch_run(self, test_patch_run_cmd: str = "") -> str:
-        if test_patch_run_cmd:
-            return test_patch_run_cmd
-
-        return "bash /home/test-run.sh"
-
-    def fix_patch_run(self, fix_patch_run_cmd: str = "") -> str:
-        if fix_patch_run_cmd:
-            return fix_patch_run_cmd
-
-        return "bash /home/fix-run.sh"
+    def fix_patch_run(self, cmd: str = "") -> str:
+        return cmd or "bash /home/fix-run.sh"
 
     def parse_log(self, test_log: str) -> TestResult:
+        import re as _re
+
         passed_tests = set()
         failed_tests = set()
         skipped_tests = set()
 
-        passed_res = [
-            re.compile(r"^> Task :(\S+)$"),
-            re.compile(r"^> Task :(\S+) UP-TO-DATE$"),
-            re.compile(r"^(.+ > .+) PASSED$"),
+        # Remove ANSI color codes
+        ansi_escape = _re.compile(r'\x1b\[[0-9;]*m')
+        clean_log = ansi_escape.sub('', test_log)
+
+        re_pass_tests = [
+            _re.compile(
+                r"\[INFO\]\s+Running\s+(.+?)\s*\n.*?INFO.*?Tests run:\s*(\d+),\s*Failures:\s*(\d+),\s*Errors:\s*(\d+),\s*Skipped:\s*(\d+),\s*Time elapsed:\s*[\d.]+\s*s"
+            )
+        ]
+        re_fail_tests = [
+            _re.compile(
+                r"\[INFO\]\s+Running\s+(.+?)\s*\n.*?INFO.*?Tests run:\s*(\d+),\s*Failures:\s*(\d+),\s*Errors:\s*(\d+),\s*Skipped:\s*(\d+),\s*Time elapsed:\s*[\d.]+\s*s\s+<<<\s*FAILURE!"
+            )
         ]
 
-        failed_res = [
-            re.compile(r"^> Task :(\S+) FAILED$"),
-            re.compile(r"^(.+ > .+) FAILED$"),
-        ]
+        for re_pass_test in re_pass_tests:
+            tests = re_pass_test.findall(clean_log, _re.MULTILINE | _re.DOTALL)
+            for test in tests:
+                test_name = test[0]
+                tests_run = int(test[1])
+                failures = int(test[2])
+                errors = int(test[3])
+                skipped = int(test[4])
+                if (
+                    tests_run > 0
+                    and failures == 0
+                    and errors == 0
+                    and skipped != tests_run
+                ):
+                    passed_tests.add(test_name)
+                elif failures > 0 or errors > 0:
+                    failed_tests.add(test_name)
+                elif skipped == tests_run:
+                    skipped_tests.add(test_name)
 
-        skipped_res = [
-            re.compile(r"^> Task :(\S+) SKIPPED$"),
-            re.compile(r"^> Task :(\S+) NO-SOURCE$"),
-            re.compile(r"^(.+ > .+) SKIPPED$"),
-        ]
-
-        for line in test_log.splitlines():
-            for passed_re in passed_res:
-                m = passed_re.match(line)
-                if m and m.group(1) not in failed_tests:
-                    passed_tests.add(m.group(1))
-
-            for failed_re in failed_res:
-                m = failed_re.match(line)
-                if m:
-                    failed_tests.add(m.group(1))
-                    if m.group(1) in passed_tests:
-                        passed_tests.remove(m.group(1))
-
-            for skipped_re in skipped_res:
-                m = skipped_re.match(line)
-                if m:
-                    skipped_tests.add(m.group(1))
+        for re_fail_test in re_fail_tests:
+            tests = re_fail_test.findall(clean_log, _re.MULTILINE | _re.DOTALL)
+            for test in tests:
+                test_name = test[0]
+                failed_tests.add(test_name)
 
         return TestResult(
             passed_count=len(passed_tests),

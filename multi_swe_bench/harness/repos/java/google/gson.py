@@ -1,5 +1,4 @@
 import re
-import textwrap
 from typing import Optional, Union
 
 from multi_swe_bench.harness.image import Config, File, Image
@@ -7,7 +6,7 @@ from multi_swe_bench.harness.instance import Instance, TestResult
 from multi_swe_bench.harness.pull_request import PullRequest
 
 
-class GsonImageBase(Image):
+class ImageBase(Image):
     def __init__(self, pr: PullRequest, config: Config):
         self._pr = pr
         self._config = config
@@ -52,7 +51,6 @@ ENV LC_ALL=C.UTF-8
 WORKDIR /home/
 RUN apt-get update && apt-get install -y git openjdk-11-jdk
 RUN apt-get install -y maven
-
 {code}
 
 {self.clear_env}
@@ -60,7 +58,7 @@ RUN apt-get install -y maven
 """
 
 
-class GsonImageDefault(Image):
+class ImageDefault(Image):
     def __init__(self, pr: PullRequest, config: Config):
         self._pr = pr
         self._config = config
@@ -74,7 +72,7 @@ class GsonImageDefault(Image):
         return self._config
 
     def dependency(self) -> Image | None:
-        return GsonImageBase(self.pr, self._config)
+        return ImageBase(self.pr, self.config)
 
     def image_tag(self) -> str:
         return f"pr-{self.pr.number}"
@@ -127,6 +125,9 @@ bash /home/check_git_changes.sh
 git checkout {pr.base.sha}
 bash /home/check_git_changes.sh
 
+# Injected setup commands
+
+
 mvn clean test -Dmaven.test.skip=false -DfailIfNoTests=false || true
 """.format(pr=self.pr),
             ),
@@ -167,75 +168,19 @@ mvn clean test -Dmaven.test.skip=false -DfailIfNoTests=false
         ]
 
     def dockerfile(self) -> str:
-        image = self.dependency()
-        name = image.image_name()
-        tag = image.image_tag()
+        parent = self.dependency()
+        name = parent.image_name()
+        tag = parent.image_tag()
 
-        copy_commands = ""
-        for file in self.files():
-            copy_commands += f"COPY {file.name} /home/\n"
+        copy_cmds = "".join([f"COPY {f.name} /home/\n" for f in self.files()])
 
-        prepare_commands = "RUN bash /home/prepare.sh"
-        proxy_setup = ""
-        proxy_cleanup = ""
-
-        if self.global_env:
-            # Extract proxy host and port
-            proxy_host = None
-            proxy_port = None
-
-            for line in self.global_env.splitlines():
-                match = re.match(
-                    r"^ENV\s*(http[s]?_proxy)=http[s]?://([^:]+):(\d+)", line
-                )
-                if match:
-                    proxy_host = match.group(2)
-                    proxy_port = match.group(3)
-                    break
-            if proxy_host and proxy_port:
-                proxy_setup = textwrap.dedent(
-                    f"""
-                RUN mkdir -p ~/.m2 && \\
-                    if [ ! -f ~/.m2/settings.xml ]; then \\
-                        echo '<?xml version="1.0" encoding="UTF-8"?>' > ~/.m2/settings.xml && \\
-                        echo '<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"' >> ~/.m2/settings.xml && \\
-                        echo '          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"' >> ~/.m2/settings.xml && \\
-                        echo '          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 https://maven.apache.org/xsd/settings-1.0.0.xsd">' >> ~/.m2/settings.xml && \\
-                        echo '</settings>' >> ~/.m2/settings.xml; \\
-                    fi && \\
-                    sed -i '$d' ~/.m2/settings.xml && \\
-                    echo '<proxies>' >> ~/.m2/settings.xml && \\
-                    echo '    <proxy>' >> ~/.m2/settings.xml && \\
-                    echo '        <id>example-proxy</id>' >> ~/.m2/settings.xml && \\
-                    echo '        <active>true</active>' >> ~/.m2/settings.xml && \\
-                    echo '        <protocol>http</protocol>' >> ~/.m2/settings.xml && \\
-                    echo '        <host>{proxy_host}</host>' >> ~/.m2/settings.xml && \\
-                    echo '        <port>{proxy_port}</port>' >> ~/.m2/settings.xml && \\
-                    echo '        <username></username>' >> ~/.m2/settings.xml && \\
-                    echo '        <password></password>' >> ~/.m2/settings.xml && \\
-                    echo '        <nonProxyHosts></nonProxyHosts>' >> ~/.m2/settings.xml && \\
-                    echo '    </proxy>' >> ~/.m2/settings.xml && \\
-                    echo '</proxies>' >> ~/.m2/settings.xml && \\
-                    echo '</settings>' >> ~/.m2/settings.xml
-                """
-                )
-
-                proxy_cleanup = textwrap.dedent(
-                    """
-                    RUN sed -i '/<proxies>/,/<\\/proxies>/d' ~/.m2/settings.xml
-                """
-                )
         return f"""FROM {name}:{tag}
 
 {self.global_env}
 
-{proxy_setup}
+{copy_cmds}
 
-{copy_commands}
-
-{prepare_commands}
-
-{proxy_cleanup}
+RUN bash /home/prepare.sh
 
 {self.clear_env}
 
@@ -243,7 +188,7 @@ mvn clean test -Dmaven.test.skip=false -DfailIfNoTests=false
 
 
 @Instance.register("google", "gson")
-class Gson(Instance):
+class InstanceTemplate(Instance):
     def __init__(self, pr: PullRequest, config: Config, *args, **kwargs):
         super().__init__()
         self._pr = pr
@@ -254,47 +199,41 @@ class Gson(Instance):
         return self._pr
 
     def dependency(self) -> Optional[Image]:
-        return GsonImageDefault(self.pr, self._config)
+        return ImageDefault(self.pr, self._config)
 
-    def run(self, run_cmd: str = "") -> str:
-        if run_cmd:
-            return run_cmd
+    def run(self, cmd: str = "") -> str:
+        return cmd or "bash /home/run.sh"
 
-        return "bash /home/run.sh"
+    def test_patch_run(self, cmd: str = "") -> str:
+        return cmd or "bash /home/test-run.sh"
 
-    def test_patch_run(self, test_patch_run_cmd: str = "") -> str:
-        if test_patch_run_cmd:
-            return test_patch_run_cmd
-
-        return "bash /home/test-run.sh"
-
-    def fix_patch_run(self, fix_patch_run_cmd: str = "") -> str:
-        if fix_patch_run_cmd:
-            return fix_patch_run_cmd
-
-        return "bash /home/fix-run.sh"
+    def fix_patch_run(self, cmd: str = "") -> str:
+        return cmd or "bash /home/fix-run.sh"
 
     def parse_log(self, test_log: str) -> TestResult:
+        import re as _re
+
         passed_tests = set()
         failed_tests = set()
         skipped_tests = set()
 
+        # Remove ANSI color codes
+        ansi_escape = _re.compile(r'\x1b\[[0-9;]*m')
+        clean_log = ansi_escape.sub('', test_log)
+
         re_pass_tests = [
-            # re.compile(
-            #     r"Running (.+?)\nTests run: (\d+), Failures: (\d+), Errors: (\d+), Skipped: (\d+), Time elapsed: [\d\.]+ sec",
-            # ),
-            re.compile(
-                r"Running\s+(.+?)\s*\n(?:(?!Tests run:).*\n)*Tests run:\s*(\d+),\s*Failures:\s*(\d+),\s*Errors:\s*(\d+),\s*Skipped:\s*(\d+),\s*Time elapsed:\s*[\d.]+\s*sec"
+            _re.compile(
+                r"\[INFO\]\s+Running\s+(.+?)\s*\n.*?INFO.*?Tests run:\s*(\d+),\s*Failures:\s*(\d+),\s*Errors:\s*(\d+),\s*Skipped:\s*(\d+),\s*Time elapsed:\s*[\d.]+\s*s"
             )
         ]
         re_fail_tests = [
-            re.compile(
-                r"Running (.+?)\nTests run: (\d+), Failures: (\d+), Errors: (\d+), Skipped: (\d+), Time elapsed: [\d\.]+ sec +<<< FAILURE!"
+            _re.compile(
+                r"\[INFO\]\s+Running\s+(.+?)\s*\n.*?INFO.*?Tests run:\s*(\d+),\s*Failures:\s*(\d+),\s*Errors:\s*(\d+),\s*Skipped:\s*(\d+),\s*Time elapsed:\s*[\d.]+\s*s\s+<<<\s*FAILURE!"
             )
         ]
 
         for re_pass_test in re_pass_tests:
-            tests = re_pass_test.findall(test_log, re.MULTILINE)
+            tests = re_pass_test.findall(clean_log, _re.MULTILINE | _re.DOTALL)
             for test in tests:
                 test_name = test[0]
                 tests_run = int(test[1])
@@ -314,7 +253,7 @@ class Gson(Instance):
                     skipped_tests.add(test_name)
 
         for re_fail_test in re_fail_tests:
-            tests = re_fail_test.findall(test_log, re.MULTILINE)
+            tests = re_fail_test.findall(clean_log, _re.MULTILINE | _re.DOTALL)
             for test in tests:
                 test_name = test[0]
                 failed_tests.add(test_name)

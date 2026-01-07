@@ -1,3 +1,4 @@
+import re
 from typing import Optional, Union
 
 from multi_swe_bench.harness.image import Config, File, Image
@@ -5,7 +6,7 @@ from multi_swe_bench.harness.instance import Instance, TestResult
 from multi_swe_bench.harness.pull_request import PullRequest
 
 
-class KeycloakImageBase(Image):
+class ImageBase(Image):
     def __init__(self, pr: PullRequest, config: Config):
         self._pr = pr
         self._config = config
@@ -44,9 +45,12 @@ class KeycloakImageBase(Image):
 
 {self.global_env}
 
+ENV DEBIAN_FRONTEND=noninteractive
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
 WORKDIR /home/
-RUN apt-get update && apt-get install -y git openjdk-21-jdk
-
+RUN apt-get update && apt-get install -y git openjdk-11-jdk
+RUN apt-get install -y maven
 {code}
 
 {self.clear_env}
@@ -54,7 +58,7 @@ RUN apt-get update && apt-get install -y git openjdk-21-jdk
 """
 
 
-class KeycloakImageDefault(Image):
+class ImageDefault(Image):
     def __init__(self, pr: PullRequest, config: Config):
         self._pr = pr
         self._config = config
@@ -68,7 +72,7 @@ class KeycloakImageDefault(Image):
         return self._config
 
     def dependency(self) -> Image | None:
-        return KeycloakImageBase(self.pr, self._config)
+        return ImageBase(self.pr, self.config)
 
     def image_tag(self) -> str:
         return f"pr-{self.pr.number}"
@@ -121,6 +125,10 @@ bash /home/check_git_changes.sh
 git checkout {pr.base.sha}
 bash /home/check_git_changes.sh
 
+# Injected setup commands
+
+
+mvn clean test -Dmaven.test.skip=false -DfailIfNoTests=false || true
 """.format(pr=self.pr),
             ),
             File(
@@ -130,7 +138,7 @@ bash /home/check_git_changes.sh
 set -e
 
 cd /home/{pr.repo}
-./mvnw clean test -fae
+mvn clean test -Dmaven.test.skip=false -DfailIfNoTests=false
 """.format(pr=self.pr),
             ),
             File(
@@ -141,7 +149,7 @@ set -e
 
 cd /home/{pr.repo}
 git apply --whitespace=nowarn /home/test.patch
-./mvnw clean test -fae
+mvn clean test -Dmaven.test.skip=false -DfailIfNoTests=false
 
 """.format(pr=self.pr),
             ),
@@ -153,30 +161,26 @@ set -e
 
 cd /home/{pr.repo}
 git apply --whitespace=nowarn /home/test.patch /home/fix.patch
-./mvnw clean test -fae
+mvn clean test -Dmaven.test.skip=false -DfailIfNoTests=false
 
 """.format(pr=self.pr),
             ),
         ]
 
     def dockerfile(self) -> str:
-        image = self.dependency()
-        name = image.image_name()
-        tag = image.image_tag()
+        parent = self.dependency()
+        name = parent.image_name()
+        tag = parent.image_tag()
 
-        copy_commands = ""
-        for file in self.files():
-            copy_commands += f"COPY {file.name} /home/\n"
-
-        prepare_commands = "RUN bash /home/prepare.sh"
+        copy_cmds = "".join([f"COPY {f.name} /home/\n" for f in self.files()])
 
         return f"""FROM {name}:{tag}
 
 {self.global_env}
 
-{copy_commands}
+{copy_cmds}
 
-{prepare_commands}
+RUN bash /home/prepare.sh
 
 {self.clear_env}
 
@@ -184,7 +188,7 @@ git apply --whitespace=nowarn /home/test.patch /home/fix.patch
 
 
 @Instance.register("keycloak", "keycloak")
-class Keycloak(Instance):
+class InstanceTemplate(Instance):
     def __init__(self, pr: PullRequest, config: Config, *args, **kwargs):
         super().__init__()
         self._pr = pr
@@ -195,30 +199,64 @@ class Keycloak(Instance):
         return self._pr
 
     def dependency(self) -> Optional[Image]:
-        return KeycloakImageDefault(self.pr, self._config)
+        return ImageDefault(self.pr, self._config)
 
-    def run(self, run_cmd: str = "") -> str:
-        if run_cmd:
-            return run_cmd
+    def run(self, cmd: str = "") -> str:
+        return cmd or "bash /home/run.sh"
 
-        return "bash /home/run.sh"
+    def test_patch_run(self, cmd: str = "") -> str:
+        return cmd or "bash /home/test-run.sh"
 
-    def test_patch_run(self, test_patch_run_cmd: str = "") -> str:
-        if test_patch_run_cmd:
-            return test_patch_run_cmd
-
-        return "bash /home/test-run.sh"
-
-    def fix_patch_run(self, fix_patch_run_cmd: str = "") -> str:
-        if fix_patch_run_cmd:
-            return fix_patch_run_cmd
-
-        return "bash /home/fix-run.sh"
+    def fix_patch_run(self, cmd: str = "") -> str:
+        return cmd or "bash /home/fix-run.sh"
 
     def parse_log(self, test_log: str) -> TestResult:
+        import re as _re
+
         passed_tests = set()
         failed_tests = set()
         skipped_tests = set()
+
+        # Remove ANSI color codes
+        ansi_escape = _re.compile(r'\x1b\[[0-9;]*m')
+        clean_log = ansi_escape.sub('', test_log)
+
+        re_pass_tests = [
+            _re.compile(
+                r"\[INFO\]\s+Running\s+(.+?)\s*\n.*?INFO.*?Tests run:\s*(\d+),\s*Failures:\s*(\d+),\s*Errors:\s*(\d+),\s*Skipped:\s*(\d+),\s*Time elapsed:\s*[\d.]+\s*s"
+            )
+        ]
+        re_fail_tests = [
+            _re.compile(
+                r"\[INFO\]\s+Running\s+(.+?)\s*\n.*?INFO.*?Tests run:\s*(\d+),\s*Failures:\s*(\d+),\s*Errors:\s*(\d+),\s*Skipped:\s*(\d+),\s*Time elapsed:\s*[\d.]+\s*s\s+<<<\s*FAILURE!"
+            )
+        ]
+
+        for re_pass_test in re_pass_tests:
+            tests = re_pass_test.findall(clean_log, _re.MULTILINE | _re.DOTALL)
+            for test in tests:
+                test_name = test[0]
+                tests_run = int(test[1])
+                failures = int(test[2])
+                errors = int(test[3])
+                skipped = int(test[4])
+                if (
+                    tests_run > 0
+                    and failures == 0
+                    and errors == 0
+                    and skipped != tests_run
+                ):
+                    passed_tests.add(test_name)
+                elif failures > 0 or errors > 0:
+                    failed_tests.add(test_name)
+                elif skipped == tests_run:
+                    skipped_tests.add(test_name)
+
+        for re_fail_test in re_fail_tests:
+            tests = re_fail_test.findall(clean_log, _re.MULTILINE | _re.DOTALL)
+            for test in tests:
+                test_name = test[0]
+                failed_tests.add(test_name)
 
         return TestResult(
             passed_count=len(passed_tests),
