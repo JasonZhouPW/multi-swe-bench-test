@@ -50,9 +50,9 @@ fi
 # # if [ -z "$LANG_RAW" ]; then
 # #     LANG_RAW="java"
 # # fi
-# # if [ "$LANG_RAW" == "Go" ]; then
-# #     LANG_RAW="golang"
-# # fi
+if [ "$LANG_RAW" == "Go" ]; then
+    LANG_RAW="golang"
+fi
 # GEN_INSTANCE="./data_pipeline/gen_instance_from_dataset_${LANG_RAW}.sh"
 # echo " Using GEN_INSTANCE: $GEN_INSTANCE"
 # chmod +x "$GEN_INSTANCE"
