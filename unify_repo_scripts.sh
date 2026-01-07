@@ -42,25 +42,35 @@ else
     exit 1
 fi
 
-LINE=$(head -n 1 "$INPUT")
-LANG_RAW=$(echo "$LINE" | sed -n 's/.*"language": *"\([^"]*\)".*/\1/p')
-LANG_RAW=$(echo "$LANG_RAW" | tr 'A-Z' 'a-z')
+# LINE=$(head -n 1 "$INPUT")
+# LANG_RAW=$(echo "$LINE" | sed -n 's/.*"language": *"\([^"]*\)".*/\1/p')
+# LANG_RAW=$(echo "$LANG_RAW" | tr 'A-Z' 'a-z')
 
-echo "🔍 Detected language: $LANG_RAW"
-if [ -z "$LANG_RAW" ]; then
-    LANG_RAW="java"
-fi
-if [ "$LANG_RAW" == "Go" ]; then
-    LANG_RAW="golang"
-fi
-GEN_INSTANCE="./data_pipeline/gen_instance_from_dataset_${LANG_RAW}.sh"
-echo " Using GEN_INSTANCE: $GEN_INSTANCE"
-chmod +x "$GEN_INSTANCE"
+# echo "🔍 Detected language: $LANG_RAW"
+# # if [ -z "$LANG_RAW" ]; then
+# #     LANG_RAW="java"
+# # fi
+# # if [ "$LANG_RAW" == "Go" ]; then
+# #     LANG_RAW="golang"
+# # fi
+# GEN_INSTANCE="./data_pipeline/gen_instance_from_dataset_${LANG_RAW}.sh"
+# echo " Using GEN_INSTANCE: $GEN_INSTANCE"
+# chmod +x "$GEN_INSTANCE"
 
 ########################################
 # Process all matched files
 ########################################
 for RAW_FILE in "${FILES[@]}"; do
+
+    LINE=$(head -n 1 "$RAW_FILE")
+    LANG_RAW=$(echo "$LINE" | sed -n 's/.*"language": *"\([^"]*\)".*/\1/p')
+    LANG_RAW=$(echo "$LANG_RAW" | tr 'A-Z' 'a-z')
+
+    echo "🔍 Detected language: $LANG_RAW"
+    GEN_INSTANCE="./data_pipeline/gen_instance_from_dataset_${LANG_RAW}.sh"
+    echo " Using GEN_INSTANCE: $GEN_INSTANCE"
+    chmod +x "$GEN_INSTANCE"
+
     FILENAME=$(basename "$RAW_FILE")
     DIRNAME=$(dirname "$RAW_FILE")
     TEMP_FILE="${DIRNAME}/temp_single_${FILENAME}"
