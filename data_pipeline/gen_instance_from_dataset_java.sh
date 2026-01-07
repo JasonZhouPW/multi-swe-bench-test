@@ -88,8 +88,10 @@ CLASS_NAME=$(echo "$REPO_PY" | sed -E 's/(^|_)([a-z])/\U\2/g')
 ###################################################
 BASE_DIR="./multi_swe_bench/harness/repos/$LANG_DIR/$ORG_PY"
 mkdir -p "$BASE_DIR"
-
+# replace REPO_PY "." to "_" for filename safety
+REPO_PY=$(echo "$REPO_PY" | tr '.' '_')
 TARGET_FILE="$BASE_DIR/${REPO_PY}.py"
+
 
 echo "📄 Generating instance file:"
 echo "   $TARGET_FILE"

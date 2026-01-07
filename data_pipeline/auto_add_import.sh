@@ -38,7 +38,7 @@ echo "  LANGUAGE = $LANG"
 # Python import 兼容包名格式转换
 ##########################################
 ORG_PY=$(echo "$ORG" | tr '-' '_' | tr 'A-Z' 'a-z')
-REPO_PY=$(echo "$REPO" | tr '-' '_' | tr 'A-Z' 'a-z')
+REPO_PY=$(echo "$REPO" | tr '-' '_' | tr '.' '_' | tr 'A-Z' 'a-z')
 
 ##########################################
 # 语言映射：raw → 目录名

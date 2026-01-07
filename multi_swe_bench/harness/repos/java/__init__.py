@@ -18,3 +18,4 @@ from multi_swe_bench.harness.repos.java.Graylog2 import *
 from multi_swe_bench.harness.repos.java.micronautprojects import *
 from multi_swe_bench.harness.repos.java.apache.dolphinscheduler import *
 from multi_swe_bench.harness.repos.java.apache.dubbo import *
+from multi_swe_bench.harness.repos.java.eclipse_vertx.vert_x import *
