@@ -104,6 +104,9 @@ for RAW_FILE in "${FILES[@]}"; do
 
     echo "🎉 Finished processing: $FILENAME"
     echo ""
+
+    echo "rm all docker images"
+    docker rmi $(docker images -q) || true
 done
 
 ##########################################
