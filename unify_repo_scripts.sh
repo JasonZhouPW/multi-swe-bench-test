@@ -104,7 +104,7 @@ for RAW_FILE in "${FILES[@]}"; do
 
     echo "🎉 Finished processing: $FILENAME"
     echo ""
-    
+
     echo "========================================="
     echo "🚀 Finally: Building dataset..."
     echo "========================================="
@@ -131,9 +131,12 @@ for RAW_FILE in "${FILES[@]}"; do
 
     echo "✅ Dataset generated: $DATASET_PATH"
 
-
-
     echo "rm all docker images"
+    # 1. stop all docker containers
+    docker container stop $(docker ps -aq) || true
+    # 2. remove all docker containers
+    docker container rm $(docker ps -aq) || true
+    # 3. remove all docker images
     docker rmi $(docker images -q) || true
 done
 
