@@ -116,7 +116,7 @@ for RAW_FILE in "${FILES[@]}"; do
     fi
     # --------------------------------
 
-    ./data_pipeline/build_dataset.sh "$RAW_FILE" || true
+    ./data_pipeline/build_dataset.sh "$RAW_FILE" 
 
     ##########################################
     # 推导 dataset 文件名（多条合并在一个文件中）
