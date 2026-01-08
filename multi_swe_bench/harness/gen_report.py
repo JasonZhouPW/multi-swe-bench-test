@@ -561,9 +561,12 @@ class CliArgs:
 
         for repo_file_name in dataset:
             dataset[repo_file_name].sort(reverse=True)
+            output_file = self.output_dir / f"{repo_file_name}_dataset.jsonl"
+            # 如果文件已存在，使用追加模式，否则创建新文件
+            mode = "a" if output_file.exists() else "w"
             with open(
-                self.output_dir / f"{repo_file_name}_dataset.jsonl",
-                "w",
+                output_file,
+                mode,
                 encoding="utf-8",
             ) as f:
                 for data in dataset[repo_file_name]:

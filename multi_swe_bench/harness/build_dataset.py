@@ -928,6 +928,8 @@ class CliArgs:
     def run_mode_dataset(self):
         self.run_mode_instance()
         self.logger.info("Building dataset...")
+        # 写入dataset文件的部分通过ReportBuilder.run()完成
+        # 在gen_report.py的run_dataset方法中，数据集被写入到{repo_file_name}_dataset.jsonl文件中
         ReportBuilder(
             mode="dataset",
             workdir=self.workdir,

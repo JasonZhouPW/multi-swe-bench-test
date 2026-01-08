@@ -116,7 +116,7 @@ for RAW_FILE in "${FILES[@]}"; do
     fi
     # --------------------------------
 
-    ./data_pipeline/build_dataset.sh "$RAW_FILE"
+    ./data_pipeline/build_dataset.sh "$RAW_FILE" || true
 
     ##########################################
     # 推导 dataset 文件名（多条合并在一个文件中）
@@ -126,10 +126,11 @@ for RAW_FILE in "${FILES[@]}"; do
 
     if [ ! -f "$DATASET_PATH" ]; then
         echo "❌ Error: dataset file not generated: $DATASET_PATH"
-        exit 1
+        # exit 1 # continue to next file
+    else 
+        echo "✅ Dataset generated: $DATASET_PATH"    
     fi
 
-    echo "✅ Dataset generated: $DATASET_PATH"
 
     echo "rm all docker images"
     # 1. stop all docker containers
