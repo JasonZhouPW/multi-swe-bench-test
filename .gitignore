@@ -197,3 +197,4 @@ data/
 .vscode/
 operator.sh
 repos/
+repos/*/__init__.py

@@ -18,3 +18,4 @@ from multi_swe_bench.harness.repos.golang.zeromicro import *
 from multi_swe_bench.harness.repos.golang.concourse import *
 from multi_swe_bench.harness.repos.golang.natsio import *
 from multi_swe_bench.harness.repos.golang.fatedier.frp import *
+from multi_swe_bench.harness.repos.golang.openlistteam.openlist import *
