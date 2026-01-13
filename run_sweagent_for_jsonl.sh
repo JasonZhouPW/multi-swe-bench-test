@@ -4,7 +4,7 @@ set -euo pipefail
 WORK_DIR="${1:?usage: $0 <work-dir> [jsonl_path]}"
 JSONL="${2:-$WORK_DIR/extracted_ds.jsonl}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-CFG="$SCRIPT_DIR/config.yaml"
+CFG="./configs/sweagent.yaml"
 GITHUB_DIR="$WORK_DIR/github"
 PATCH_DIR="$WORK_DIR/patches"
 
