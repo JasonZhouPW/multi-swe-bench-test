@@ -198,3 +198,4 @@ data/
 operator.sh
 repos/
 repos/*/__init__.py
+configs/*
