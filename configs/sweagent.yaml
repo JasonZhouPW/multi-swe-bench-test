@@ -4,15 +4,15 @@
 agent:
   model:
     # name: openai/gpt-oss-120b
-    name: GLM-4.6
+    name: openai/doubao-seed-1-8-251228
     # api_base: http://192.168.100.30:11434
     per_instance_cost_limit: 0   
     total_cost_limit: 0
     per_instance_call_limit: 100
     max_input_tokens: 0  
-    api_base: https://ai-gateway.vercel.sh/v1
+    api_base: https://ark.cn-beijing.volces.com/api/v3
     # api_base: https://open.bigmodel.cn/api/paas/v4
-    api_key: vck_8Lyll4kQexeedgks11RC6GKmolVjfRZ5hh0HH3tuP350qpjldB0qfxor
+    api_key: ce3589eb-dde9-467f-8609-e5d84b8993e9
     # api_key: 6fd15cb77cff4a31b151cdd87be8dac9.QESK5aHeMk4TJShD
   # You probably do not need the cache control history processor if you're not
   # using Claude, so please remove it if it's in your config.

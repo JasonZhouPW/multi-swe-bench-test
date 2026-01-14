@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
 WORK_DIR="${1:?usage: $0 <work-dir> [jsonl_path]}"
 JSONL="${2:-$WORK_DIR/extracted_ds.jsonl}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CFG="$SCRIPT_DIR/sweagent.yaml"
 GITHUB_DIR="$WORK_DIR/github"
 PATCH_DIR="$WORK_DIR/patches"
+
+export GITHUB_TOKEN="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"
 
 mkdir -p "$GITHUB_DIR" "$PATCH_DIR"
 echo "config file:$CFG"
