@@ -4,8 +4,8 @@ WORK_DIR="${1:?usage: $0 <work-dir> [jsonl_path]}"
 JSONL="${2:-$WORK_DIR/extracted_ds.jsonl}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CFG="$SCRIPT_DIR/sweagent.yaml"
-GITHUB_DIR="$WORK_DIR/github"
 PATCH_DIR="$WORK_DIR/patches"
+RESULT_FILE="$WORK_DIR/results.log"
 
 export GITHUB_TOKEN="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"
 
@@ -38,11 +38,15 @@ if command -v jq >/dev/null 2>&1; then
     status=$?
     set -e
     if grep -q "Submission successful" "$log_file"; then
+      echo "${org}_${repo}_${number} : success" >> "$RESULT_FILE"
       patch_path=$(awk '/PATCH_FILE_PATH=/{printf $0; getline; print $0}' "$log_file" | awk -F"'" '{print $2}' | tr -d ' ')
       if [ -n "$patch_path" ] && [ -f "$patch_path" ]; then
         echo "cp $patch_path $PATCH_DIR/${org}_${repo}_${number}_${issueNumber}.patch"
         cp "$patch_path" "$PATCH_DIR/${org}_${repo}_${number}_${issueNumber}.patch"
       fi
+    else
+      fail_msg=$(grep -v '^[[:space:]]*$' "$log_file" | tail -n 1)
+      echo "${org}_${repo}_${number} : failed | $fail_msg" >> "$RESULT_FILE"
     fi
     rm -f "$log_file"
   done
@@ -83,6 +87,7 @@ else
     set -e
     echo "status:$status"
     if grep -q "Submission successful" "$log_file"; then
+      echo "${org}_${repo}_${number} : success" >> "$RESULT_FILE"
       echo "===Submission successful"
       # patch_path=$(grep -Eo "PATCH_FILE_PATH=['\"][^'\"]*\.patch['\"]" "$log_file" | tail -n100 | sed -E "s/^PATCH_FILE_PATH=['\"]//; s/['\"]$//")
       patch_path=$(awk '/PATCH_FILE_PATH=/{printf $0; getline; print $0}' "$log_file" | awk -F"'" '{print $2}' | tr -d ' ')
@@ -93,6 +98,9 @@ else
         echo "cp $patch_path $PATCH_DIR/${org}_${repo}_${number}_${issueNumber}.patch"
         cp "$patch_path" "$PATCH_DIR/${org}_${repo}_${number}_${issueNumber}.patch"
       fi
+    else
+      fail_msg=$(grep -v '^[[:space:]]*$' "$log_file" | tail -n 1)
+      echo "${org}_${repo}_${number} : failed | $fail_msg" >> "$RESULT_FILE"
     fi
     rm -f "$log_file"
   done < "$JSONL"
