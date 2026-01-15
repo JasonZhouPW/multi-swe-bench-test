@@ -18,7 +18,7 @@ if command -v jq >/dev/null 2>&1; then
     [ -n "$org" ] && [ -n "$repo" ] && [ -n "$issue_url" ] || continue
     if [[ "$issue_url" =~ ^https://api.github.com/repos/([^/]+)/([^/]+)/issues/([0-9]+)$ ]]; then
       issueNumber="${BASH_REMATCH[3]}"
-      issue_url="https://github.com/${BASH_REMATCH[1]}/${BASH_REMATCH[2]}/issues/${BASH_REMATCH[3]}"
+      # issue_url="https://github.com/${BASH_REMATCH[1]}/${BASH_REMATCH[2]}/issues/${BASH_REMATCH[3]}"
     fi
     clone_dir="$GITHUB_DIR/$org/$repo"
     if [ -d "$clone_dir/.git" ]; then
@@ -65,7 +65,7 @@ else
     [ -n "$org" ] && [ -n "$repo" ] && [ -n "$number" ] && [ -n "$issue_url" ] || continue
     if [[ "$issue_url" =~ ^https://api.github.com/repos/([^/]+)/([^/]+)/issues/([0-9]+)$ ]]; then
       issueNumber="${BASH_REMATCH[3]}"
-      issue_url="https://github.com/${BASH_REMATCH[1]}/${BASH_REMATCH[2]}/issues/${BASH_REMATCH[3]}"
+      # issue_url="https://github.com/${BASH_REMATCH[1]}/${BASH_REMATCH[2]}/issues/${BASH_REMATCH[3]}"
     fi
     clone_dir="$GITHUB_DIR/$org/$repo"
     if [ -d "$clone_dir/.git" ]; then

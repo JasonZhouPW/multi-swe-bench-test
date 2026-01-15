@@ -16,13 +16,14 @@ echo "===================================================="
 echo "Analyzing: $INPUT_FILE"
 
 # 1. Total findings
-TOTAL=$(jq '.results | length' "$INPUT_FILE")
+# Ensure we are dealing with an object and results exists
+TOTAL=$(jq 'if type == "object" and has("results") then .results | length else 0 end' "$INPUT_FILE")
 echo "Total Findings: $TOTAL"
 
 # 2. Count by Severity
-ERRORS=$(jq '[.results[] | select(.extra.severity == "ERROR")] | length' "$INPUT_FILE")
-WARNINGS=$(jq '[.results[] | select(.extra.severity == "WARNING")] | length' "$INPUT_FILE")
-INFOS=$(jq '[.results[] | select(.extra.severity == "INFO")] | length' "$INPUT_FILE")
+ERRORS=$(jq 'if type == "object" and has("results") then [.results[] | select(.extra.severity == "ERROR")] | length else 0 end' "$INPUT_FILE")
+WARNINGS=$(jq 'if type == "object" and has("results") then [.results[] | select(.extra.severity == "WARNING")] | length else 0 end' "$INPUT_FILE")
+INFOS=$(jq 'if type == "object" and has("results") then [.results[] | select(.extra.severity == "INFO")] | length else 0 end' "$INPUT_FILE")
 
 echo "----------------------------------------------------"
 echo "Severity Breakdown:"
@@ -33,7 +34,7 @@ echo "  - INFO:     $INFOS"
 # 3. Check ID Statistics
 echo "----------------------------------------------------"
 echo "Findings by Check ID:"
-jq -r '.results[].check_id' "$INPUT_FILE" | sort | uniq -c | sort -nr | awk '{printf "  %3d x %s\n", $1, $2}'
+jq -r '.results[]?.check_id // empty' "$INPUT_FILE" | sort | uniq -c | sort -nr | awk '{printf "  %3d x %s\n", $1, $2}'
 
 # 4. Rating System
 # Base Score: 100

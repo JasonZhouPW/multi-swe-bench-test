@@ -19,6 +19,8 @@ if command -v jq >/dev/null 2>&1; then
     if [[ "$issue_url" =~ ^https://api.github.com/repos/([^/]+)/([^/]+)/issues/([0-9]+)$ ]]; then
       issueNumber="${BASH_REMATCH[3]}"
       issue_url="https://github.com/${BASH_REMATCH[1]}/${BASH_REMATCH[2]}/issues/${BASH_REMATCH[3]}"
+      # issue_url="https://api.github.com/repos/${BASH_REMATCH[1]}/${BASH_REMATCH[2]}/issues/${BASH_REMATCH[3]}"
+      echo "issue_url:$issue_url"
     fi
     clone_dir="$GITHUB_DIR/$org/$repo"
     if [ -d "$clone_dir/.git" ]; then

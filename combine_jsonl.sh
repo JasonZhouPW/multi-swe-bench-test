@@ -29,7 +29,9 @@ while read -r line; do
     ((count++))
 done < <(find "$INPUT_DIR" -maxdepth 1 -name "*.jsonl")
 
-# Cleanup empty lines in output if any (cat might add extra newlines)
-sed -i '' '/^[[:space:]]*$/d' "$OUTPUT_FILE"
+# Cleanup empty lines in output if any
+tmp_file=$(mktemp)
+grep -v '^[[:space:]]*$' "$OUTPUT_FILE" > "$tmp_file" || true
+mv "$tmp_file" "$OUTPUT_FILE"
 
 echo "Done. Combined $count files into '$OUTPUT_FILE'."

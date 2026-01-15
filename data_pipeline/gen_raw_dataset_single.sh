@@ -25,15 +25,16 @@ OUTPUT_DIR="data/raw_datasets/${TODAY}_${LANGUAGE}"
 # Usage/help
 usage() {
     echo "Usage: $0 [-o output_dir] [-t token] [-r org/repo]"
-    echo "  -o output_dir   Output directory for raw datasets (default: $OUTPUT_DIR)"
-    echo "  -l language     Language filter (default: $LANGUAGE)"
-    echo "  -t token        GitHub token (default: value in script)"
-    echo "  -r org/repo     Comma-separated list of specific repos to process (format: org/repo)"
+    echo "  -o output_dir    Output directory for raw datasets (default: $OUTPUT_DIR)"
+    echo "  -l language      Language filter (default: $LANGUAGE)"
+    echo "  -t token         GitHub token (default: value in script)"
+    echo "  -r org/repo      Comma-separated list of specific repos to process (format: org/repo)"
+    echo "  -c created_at    Fetch PRs/Issues created on or after this date (default: $CREATED_AT)"
     exit 1
 }
 
 # Parse command-line options
-while getopts ":o:l:s:n:t:r:h" opt; do
+while getopts ":o:l:s:n:t:r:c:h" opt; do
   case $opt in
     o) OUTPUT_DIR="$OPTARG" ;;
     l) LANGUAGE="$OPTARG" ;;
@@ -41,6 +42,7 @@ while getopts ":o:l:s:n:t:r:h" opt; do
     # n) MAX_RESULTS="$OPTARG" ;;
     t) TOKEN="$OPTARG" ;;
     r) REPOS="$OPTARG" ;;
+    c) CREATED_AT="$OPTARG" ;;
     h) usage ;;
     \?) echo "Invalid option: -$OPTARG" >&2; usage ;;
     :) echo "Option -$OPTARG requires an argument." >&2; usage ;;
