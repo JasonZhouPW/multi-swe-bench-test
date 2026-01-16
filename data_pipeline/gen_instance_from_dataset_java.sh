@@ -230,7 +230,12 @@ bash /home/check_git_changes.sh
 # Injected setup commands
 __SETUP_COMMANDS_BLOCK__
 
-mvn clean test -Dmaven.test.skip=false -DfailIfNoTests=false || true
+# Check if Maven pom.xml exists, otherwise use Gradle
+if [ -f "pom.xml" ]; then
+    mvn clean test -Dmaven.test.skip=false -DfailIfNoTests=false --batch-mode || true
+else
+    ./gradlew test --info --continue || true
+fi
 """.format(pr=self.pr),
             ),
             File(
@@ -240,7 +245,11 @@ mvn clean test -Dmaven.test.skip=false -DfailIfNoTests=false || true
 set -e
 
 cd /home/{pr.repo}
-mvn clean test -Dmaven.test.skip=false -DfailIfNoTests=false
+if [ -f "pom.xml" ]; then
+    mvn clean test -Dmaven.test.skip=false -DfailIfNoTests=false --batch-mode
+else
+    ./gradlew test --info
+fi
 """.format(pr=self.pr),
             ),
             File(
@@ -251,7 +260,11 @@ set -e
 
 cd /home/{pr.repo}
 git apply --whitespace=nowarn /home/test.patch
-mvn clean test -Dmaven.test.skip=false -DfailIfNoTests=false
+if [ -f "pom.xml" ]; then
+    mvn clean test -Dmaven.test.skip=false -DfailIfNoTests=false --batch-mode
+else
+    ./gradlew test --info
+fi
 
 """.format(pr=self.pr),
             ),
@@ -263,7 +276,11 @@ set -e
 
 cd /home/{pr.repo}
 git apply --whitespace=nowarn /home/test.patch /home/fix.patch
-mvn clean test -Dmaven.test.skip=false -DfailIfNoTests=false
+if [ -f "pom.xml" ]; then
+    mvn clean test -Dmaven.test.skip=false -DfailIfNoTests=false --batch-mode
+else
+    ./gradlew test --info
+fi
 
 """.format(pr=self.pr),
             ),
@@ -323,42 +340,48 @@ class InstanceTemplate(Instance):
         ansi_escape = _re.compile(r'\x1b\[[0-9;]*m')
         clean_log = ansi_escape.sub('', test_log)
 
-        re_pass_tests = [
-            _re.compile(
-                r"\[INFO\]\s+Running\s+(.+?)\s*\n.*?INFO.*?Tests run:\s*(\d+),\s*Failures:\s*(\d+),\s*Errors:\s*(\d+),\s*Skipped:\s*(\d+),\s*Time elapsed:\s*[\d.]+\s*s"
-            )
-        ]
-        re_fail_tests = [
-            _re.compile(
-                r"\[INFO\]\s+Running\s+(.+?)\s*\n.*?INFO.*?Tests run:\s*(\d+),\s*Failures:\s*(\d+),\s*Errors:\s*(\d+),\s*Skipped:\s*(\d+),\s*Time elapsed:\s*[\d.]+\s*s\s+<<<\s*FAILURE!"
-            )
-        ]
+        # Parse individual test results (Gradle format)
+        # Look for lines like: "TestClass > testMethod PASSED"
+        test_result_pattern = _re.compile(r'^(.+?)\s*>\s*(.+?)\s+(PASSED|FAILED|SKIPPED)$', _re.MULTILINE)
+        matches = test_result_pattern.findall(clean_log)
 
-        for re_pass_test in re_pass_tests:
-            tests = re_pass_test.findall(clean_log, _re.MULTILINE | _re.DOTALL)
-            for test in tests:
-                test_name = test[0]
-                tests_run = int(test[1])
-                failures = int(test[2])
-                errors = int(test[3])
-                skipped = int(test[4])
-                if (
-                    tests_run > 0
-                    and failures == 0
-                    and errors == 0
-                    and skipped != tests_run
-                ):
-                    passed_tests.add(test_name)
-                elif failures > 0 or errors > 0:
-                    failed_tests.add(test_name)
-                elif skipped == tests_run:
-                    skipped_tests.add(test_name)
-
-        for re_fail_test in re_fail_tests:
-            tests = re_fail_test.findall(clean_log, _re.MULTILINE | _re.DOTALL)
-            for test in tests:
-                test_name = test[0]
+        for class_name, method_name, status in matches:
+            test_name = f"{class_name}.{method_name}"
+            if status == "PASSED":
+                passed_tests.add(test_name)
+            elif status == "FAILED":
                 failed_tests.add(test_name)
+            elif status == "SKIPPED":
+                skipped_tests.add(test_name)
+
+        # If no individual test results found, try to parse summary (fallback)
+        if not (passed_tests or failed_tests or skipped_tests):
+            # Try Maven Surefire format as fallback
+            re_pass_tests = [
+                _re.compile(
+                    r"\[INFO\]\s+Running\s+(.+?)\s*\n.*?INFO.*?Tests run:\s*(\d+),\s*Failures:\s*(\d+),\s*Errors:\s*(\d+),\s*Skipped:\s*(\d+),\s*Time elapsed:\s*[\d.]+\s*s"
+                )
+            ]
+
+            for re_pass_test in re_pass_tests:
+                tests = re_pass_test.findall(clean_log, _re.MULTILINE | _re.DOTALL)
+                for test in tests:
+                    test_name = test[0]
+                    tests_run = int(test[1])
+                    failures = int(test[2])
+                    errors = int(test[3])
+                    skipped = int(test[4])
+                    if (
+                        tests_run > 0
+                        and failures == 0
+                        and errors == 0
+                        and skipped != tests_run
+                    ):
+                        passed_tests.add(test_name)
+                    elif failures > 0 or errors > 0:
+                        failed_tests.add(test_name)
+                    elif skipped == tests_run:
+                        skipped_tests.add(test_name)
 
         return TestResult(
             passed_count=len(passed_tests),

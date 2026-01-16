@@ -137,7 +137,7 @@ def main(tokens: list[str], out_dir: Path, org: str, repo: str, created_at: str 
 
     with open(out_dir / f"{org}__{repo}_prs.jsonl", "w", encoding="utf-8") as file:
         # Use the Search API to fetch merged PRs with optional merged date filter
-        # headers = {"Accept": "application/vnd.github.v3+json", "Authorization": f"{tk}"}
+        headers = {"Accept": "application/vnd.github.v3+json", "Authorization": f"{tk}"}
         # print(f"headers:{headers}")
         # query = f"repo:{org}/{repo} is:pr is:merged"
         base_query_parts = [f"repo:{org}/{repo}", "is:pr", "is:merged"]
@@ -157,8 +157,8 @@ def main(tokens: list[str], out_dir: Path, org: str, repo: str, created_at: str 
         url = base_url
         fetched = 0
         while url:
-            # resp = requests.get(url, headers=headers)
-            resp = requests.get(url)
+            resp = requests.get(url, headers=headers)
+            # resp = requests.get(url)
             print(f"resp:{resp}")
 
             resp.raise_for_status()
