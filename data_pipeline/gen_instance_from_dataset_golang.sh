@@ -86,9 +86,11 @@ BASE_DIR="./multi_swe_bench/harness/repos/$LANG_DIR/$ORG_PY"
 mkdir -p "$BASE_DIR"
 
 TARGET_FILE="$BASE_DIR/${REPO_PY}.py"
+INIT_FILE="$BASE_DIR/__init__.py"
 
-echo "📄 Generating instance file:"
+echo "📄 Generating instance files:"
 echo "   $TARGET_FILE"
+echo "   $INIT_FILE"
 
 ###################################################
 # Golang enhanced template (通用模板)
@@ -327,3 +329,17 @@ sed -i "" "s/{{ORG}}/$ORG/g"  "$TARGET_FILE" 2>/dev/null || sed -i "s/{{ORG}}/$O
 sed -i "" "s/{{REPO}}/$REPO/g" "$TARGET_FILE" 2>/dev/null || sed -i "s/{{REPO}}/$REPO/g" "$TARGET_FILE"
 
 echo "✅ Generated: $TARGET_FILE"
+
+# Create __init__.py
+cat > "$INIT_FILE" << EOF
+from multi_swe_bench.harness.repos.$LANG_DIR.$ORG_PY.$REPO_PY import *
+EOF
+
+echo "✅ Generated: $INIT_FILE"
+
+# Add import to golang/__init__.py
+GOLANG_INIT="./multi_swe_bench/harness/repos/$LANG_DIR/__init__.py"
+if [ -f "$GOLANG_INIT" ]; then
+    echo "from multi_swe_bench.harness.repos.$LANG_DIR.$ORG_PY.$REPO_PY import *" >> "$GOLANG_INIT"
+    echo "✅ Added import to $GOLANG_INIT"
+fi

@@ -68,7 +68,9 @@ for RAW_FILE in "${FILES[@]}"; do
     if [ "$LANG_RAW" == "go" ]; then
         LANG_RAW="golang"
     fi
-
+    if [ -z "$LANG_RAW" ]; then
+        LANG_RAW="golang"
+    fi
     echo "🔍 Detected language: $LANG_RAW"
     GEN_INSTANCE="./data_pipeline/gen_instance_from_dataset_${LANG_RAW}.sh"
     echo " Using GEN_INSTANCE: $GEN_INSTANCE"
@@ -94,9 +96,14 @@ for RAW_FILE in "${FILES[@]}"; do
     "$CREATE_ORG_DIR" "$TEMP_FILE"
     echo ""
 
-    echo "🧬 Step 3: gen_instance_from_dataset_$LANG_RAW.sh..."
-    "$GEN_INSTANCE" "$TEMP_FILE" 
-    echo ""
+     echo "🧬 Step 3: gen_instance_from_dataset_$LANG_RAW.sh..."
+     if "$GEN_INSTANCE" "$TEMP_FILE"; then
+         echo "✅ Instance generation successful"
+     else
+         echo "❌ Instance generation failed for $RAW_FILE"
+         # Continue to next file
+     fi
+     echo ""
 
     echo "🧹 Cleaning temp file: $TEMP_FILE"
     rm -f "$TEMP_FILE"
