@@ -249,6 +249,15 @@ class GIN_1342_TO_694(Instance):
             "skipped_tests": skipped_tests,
         }
 
+        # Ensure disjoint sets: Fail > Pass > Skip
+
+        passed -= failed
+
+        skipped -= failed
+
+        skipped -= passed
+
+
         return TestResult(
             passed_count=len(passed_tests),
             failed_count=len(failed_tests),

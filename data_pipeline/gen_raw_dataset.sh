@@ -19,7 +19,7 @@ CREATED_AT="2025-01-01" # default value
 TODAY="$(date '+%Y-%m-%d')"
 
 KEY_WORDS="bug fix"
-OUTPUT_DIR="data/raw_datasets/${TODAY}/${KEY_WORDS}"
+OUTPUT_DIR=""
 
 
 # Usage/help
@@ -32,11 +32,12 @@ usage() {
     echo "  -t token         GitHub token (default: value in script)"
     echo "  -e exclude_repos  Comma-separated list of repos to exclude (format: org/repo)"
     echo "  -c created_at    Fetch PRs/Issues created on or after this date (default: $CREATED_AT)"
+    echo "  -k key_words     Search keywords for PRs/Issues (default: $KEY_WORDS)"
     exit 1
 }
 
 # Parse command-line options
-while getopts ":o:l:s:n:t:e:c:h" opt; do
+while getopts ":o:l:s:n:t:e:c:k:h" opt; do
   case $opt in
     o) OUTPUT_DIR="$OPTARG" ;;
     l) LANGUAGE="$OPTARG" ;;
@@ -45,12 +46,20 @@ while getopts ":o:l:s:n:t:e:c:h" opt; do
     t) TOKEN="$OPTARG" ;;
     e) EXCLUDE_REPOS="$OPTARG" ;;
     c) CREATED_AT="$OPTARG" ;;
+    k) KEY_WORDS="$OPTARG" ;;
     h) usage ;;
     \?) echo "Invalid option: -$OPTARG" >&2; usage ;;
     :) echo "Option -$OPTARG requires an argument." >&2; usage ;;
   esac
 done
 shift $((OPTIND -1))
+
+# Default OUTPUT_DIR if not provided
+if [ -z "$OUTPUT_DIR" ]; then
+    # Replace spaces with underscores for the filesystem path
+    KEY_WORDS_SAFE=$(echo "$KEY_WORDS" | tr ' ' '_')
+    OUTPUT_DIR="data/raw_datasets/${TODAY}/${KEY_WORDS_SAFE}"
+fi
 
 # 显示当前配置
 echo "Configuration:"

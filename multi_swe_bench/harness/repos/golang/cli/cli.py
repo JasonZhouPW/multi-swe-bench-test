@@ -266,6 +266,15 @@ class Cli(Instance):
                         continue
                     skipped_tests.add(get_base_name(test_name))
 
+        # Ensure disjoint sets: Fail > Pass > Skip
+
+        passed -= failed
+
+        skipped -= failed
+
+        skipped -= passed
+
+
         return TestResult(
             passed_count=len(passed_tests),
             failed_count=len(failed_tests),

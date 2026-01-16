@@ -199,6 +199,15 @@ class InstanceTemplate(Instance):
                 pkg = m.group(1)
                 failed.add(f"pkg::{pkg}")
 
+        # Ensure disjoint sets: Fail > Pass > Skip
+
+        passed -= failed
+
+        skipped -= failed
+
+        skipped -= passed
+
+
         return TestResult(
             passed_count=len(passed),
             failed_count=len(failed),
