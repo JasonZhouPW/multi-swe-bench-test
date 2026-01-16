@@ -11,3 +11,4 @@ from multi_swe_bench.harness.repos.rust.rust_lang import *
 from multi_swe_bench.harness.repos.rust.serde_rs import *
 from multi_swe_bench.harness.repos.rust.sharkdp import *
 from multi_swe_bench.harness.repos.rust.tokio_rs import *
+from multi_swe_bench.harness.repos.rust.lemmynet.lemmy import *

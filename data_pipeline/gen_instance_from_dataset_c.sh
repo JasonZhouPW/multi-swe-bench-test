@@ -32,7 +32,11 @@ LANG=$(echo "$LANG_RAW" | tr 'A-Z' 'a-z')
 ########################################
 # Build setup_commands block
 ########################################
-SETUP_COMMANDS=$(jq -r '.setup_commands | join("\n")' "$EXTRA_JSON")
+if [ -n "$EXTRA_JSON" ] && [ -f "$EXTRA_JSON" ]; then
+    SETUP_COMMANDS=$(jq -r '(.setup_commands // []) | join("\n")' "$EXTRA_JSON")
+else
+    SETUP_COMMANDS=""
+fi
 export SETUP_COMMANDS
 
 ###################################################
