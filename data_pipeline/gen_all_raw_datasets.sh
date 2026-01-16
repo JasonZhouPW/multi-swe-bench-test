@@ -7,7 +7,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # Define the language array
-LANGUAGES=( "Python" "Javascript" "Rust" "C" "Typescript" "Rust")
+LANGUAGES=( "Python" "Java" "Javascript" "Rust" "C" "Typescript" "Rust")
 
 echo "Starting batch raw dataset generation for languages: ${LANGUAGES[*]}"
 

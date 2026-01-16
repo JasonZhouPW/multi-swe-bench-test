@@ -304,3 +304,4 @@ from multi_swe_bench.harness.repos.python.databricks import *
 from multi_swe_bench.harness.repos.python.cta_observatory import *
 from multi_swe_bench.harness.repos.python.gwastro import *
 
+from multi_swe_bench.harness.repos.python.huggingface.transformers import *

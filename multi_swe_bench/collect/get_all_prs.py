@@ -17,7 +17,7 @@ import json
 import random
 import re
 import requests
-from datetime import datetime,timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 # from github import Auth, Github
@@ -42,15 +42,34 @@ def get_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--org", type=str, required=False, help="Organization name.")
     parser.add_argument("--repo", type=str, required=False, help="Repository name.")
-    parser.add_argument("--created_at", type=str, required=False, default=None, help="Filter PRs created after this datetime (ISO format).")
-    parser.add_argument("--merged_after", type=str, required=False, default=None, help="Filter PRs merged after this datetime (ISO format).")
-    parser.add_argument("--key_words", type=str, required=False, default=None, help="keywords to filter PRs, separated by commas.")
+    parser.add_argument(
+        "--created_at",
+        type=str,
+        required=False,
+        default=None,
+        help="Filter PRs created after this datetime (ISO format).",
+    )
+    parser.add_argument(
+        "--merged_after",
+        type=str,
+        required=False,
+        default=None,
+        help="Filter PRs merged after this datetime (ISO format).",
+    )
+    parser.add_argument(
+        "--key_words",
+        type=str,
+        required=False,
+        default=None,
+        help="keywords to filter PRs, separated by commas.",
+    )
     return parser
 
 
 # def get_github(token) -> Github:
 #     auth = Auth.Token(token)
 #     return Github(auth=auth, per_page=100)
+
 
 def is_relevant_pull(pull, key_words: str = None) -> bool:
     """
@@ -87,7 +106,16 @@ def is_relevant_pull(pull, key_words: str = None) -> bool:
 
     return False
 
-def main(tokens: list[str], out_dir: Path, org: str, repo: str, created_at: str = None, key_words: str = None, merged_after: str = None):
+
+def main(
+    tokens: list[str],
+    out_dir: Path,
+    org: str,
+    repo: str,
+    created_at: str = None,
+    key_words: str = None,
+    merged_after: str = None,
+):
     print("starting get all pull requests")
     print(f"Output directory: {out_dir}")
     print(f"Tokens: {tokens}")
@@ -101,7 +129,7 @@ def main(tokens: list[str], out_dir: Path, org: str, repo: str, created_at: str 
     filter_dt = None
     if created_at:
         try:
-        # 支持 GitHub 风格：xxxx-xx-xxTxx:xx:xxZ
+            # 支持 GitHub 风格：xxxx-xx-xxTxx:xx:xxZ
             created_at_clean = created_at.replace("Z", "+00:00")
             dt = datetime.fromisoformat(created_at_clean)
         except ValueError:
@@ -123,13 +151,14 @@ def main(tokens: list[str], out_dir: Path, org: str, repo: str, created_at: str 
             md = md.replace(tzinfo=timezone.utc)
         merged_dt = md
 
-    print("token:", tokens)    
+    print("token:", tokens)
     tk = random.choice(tokens)
     print("Using token:", tk)
     # g = get_github(tk)
     print("org and repo:", org, repo)
     # r = g.get_repo(f"{org}/{repo}")
     print(f"Repository {org}/{repo} found.")
+
     def datetime_serializer(obj):
         if isinstance(obj, datetime):
             return obj.isoformat()
@@ -150,15 +179,16 @@ def main(tokens: list[str], out_dir: Path, org: str, repo: str, created_at: str 
                 kw_clean = kw.strip()
                 if kw_clean:
                     base_query_parts.append(f'"{kw_clean}"')
-        query = " ".join(base_query_parts)            
+        query = " ".join(base_query_parts)
         # You can also include created_at in the query if desired, but we'll keep created_at as a secondary filter
         base_url = f"https://api.github.com/search/issues?q={query}&sort=updated&order=desc&per_page=100"
 
         url = base_url
         fetched = 0
         while url:
-            resp = requests.get(url, headers=headers)
-            # resp = requests.get(url)
+            # resp = requests.get(url, headers=headers)
+            print(f"url:{url}")
+            resp = requests.get(url)
             print(f"resp:{resp}")
 
             resp.raise_for_status()
@@ -168,93 +198,99 @@ def main(tokens: list[str], out_dir: Path, org: str, repo: str, created_at: str 
             for item in items:
                 pr_number = item["number"]
                 try:
-                    pr_query_parts = [f"repo:{org}/{repo}", "is:pr", f"pr_number"]
-                    query = " ".join(base_query_parts) 
-                    pr_url = f"https://api.github.com/search/issues?q={query}"
-                    prresp = requests.get(pr_url)
-                    prdata = resp.json()
-                    pritems = data.get("pritems", [])
+                    # Fetch individual PR details using the REST API
+                    pr_url = (
+                        f"https://api.github.com/repos/{org}/{repo}/pulls/{pr_number}"
+                    )
+                    pr_resp = requests.get(pr_url, headers=headers)
+                    pr_resp.raise_for_status()
+                    pr_data = pr_resp.json()
 
                     # pull = r.get_pull(pr_number)
                 except Exception as e:
                     print(f"Failed to fetch PR #{pr_number} details: {e}")
                     continue
 
-                # Ensure merged
-                # if not pull.is_merged():
-                #     print(f"Skipping PR #{pull.number} not merged")
-                #     continue
+                # Apply filters
+                created_at_dt = datetime.fromisoformat(
+                    pr_data["created_at"].replace("Z", "+00:00")
+                )
+                merged_at_dt = pr_data.get("merged_at")
+                if merged_at_dt:
+                    merged_at_dt = datetime.fromisoformat(
+                        merged_at_dt.replace("Z", "+00:00")
+                    )
 
-                # created_at filter (existing behavior)
-                # if filter_dt is not None and filter_dt != "" and pull.created_at <= filter_dt:
-                #     print(f"Skipping PR #{pull.number} created at {pull.created_at} ,required after {filter_dt}")
-                #     continue
+                # created_at filter
+                if filter_dt is not None and created_at_dt <= filter_dt:
+                    print(
+                        f"Skipping PR #{pr_number} created at {created_at_dt}, required after {filter_dt}"
+                    )
+                    continue
 
-                # merged_at filter (if provided)
-                # if merged_dt is not None:
-                #     if pull.merged_at is None or pull.merged_at <= merged_dt:
-                #         print(f"Skipping PR #{pull.number} merged at {pull.merged_at} ,required after {merged_dt}")
-                #         continue
+                # merged_at filter
+                if merged_dt is not None and (
+                    merged_at_dt is None or merged_at_dt <= merged_dt
+                ):
+                    print(
+                        f"Skipping PR #{pr_number} merged at {merged_at_dt}, required after {merged_dt}"
+                    )
+                    continue
 
-                # keyword filtering (existing behavior)
-                # if key_words is not None and key_words != "" and not is_relevant_pull(pull, key_words):
-                #     print(f"Skipping PR #{pull.number} not matching keywords")
-                #     continue
+                # keyword filtering
+                if key_words is not None and key_words != "":
+                    # Create a mock pull object for filtering
+                    class MockLabel:
+                        def __init__(self, name):
+                            self.name = name
 
-                # print(f"Get PR #{pull.number} created at {pull.created_at} merged at {pull.merged_at} keywords {key_words} matched")
+                    class MockPull:
+                        def __init__(self, data):
+                            self.title = data.get("title", "")
+                            self.body = data.get("body", "")
+                            self.labels = [
+                                MockLabel(label["name"])
+                                for label in data.get("labels", [])
+                            ]
+
+                    mock_pull = MockPull(pr_data)
+                    if not is_relevant_pull(mock_pull, key_words):
+                        print(f"Skipping PR #{pr_number} not matching keywords")
+                        continue
+
+                print(
+                    f"Get PR #{pr_number} created at {created_at_dt} merged at {merged_at_dt}"
+                )
                 file.write(
                     json.dumps(
                         {
                             "org": org,
                             "repo": repo,
-                            "number": pritem["number"],
-                            "state": pritem["state"],
-                            "title": pritem["title"],
-                            "body": pritem["body"],
-                            "url": pritem["url"],
-                            "id": pritem["id"],
-                            "node_id": pritem["node_id"],
-                            "html_url": pritem["html_url"],
-                            "diff_url": pritem["diff_url"],
-                            "patch_url": pritem["patch_url"],
-                            "issue_url": pritem["issue_url"],
-                            "created_at": pritem["created_at"],
-                            "updated_at": pritem["updated_at"],
-                            "closed_at": pritem["closed_at"],
-                            "merged_at":pritem["merged_at"],
-                            "merge_commit_sha": pritem["merge_commit_sha"],
-                            "labels": [label["name"] for label in pull["labels"]],
-                            "draft": pritem["draft"],
-                            "commits_url": pritem["commits_url"],
-                            "review_comments_url": pritem["review_comments_url"],
-                            "review_comment_url": pritem["review_comment_url"],
-                            "comments_url": pritem["comments_url"],
-                            "base": pritem["base"]["raw_data"],
-                            #  "org": org,
-                            # "repo": repo,
-                            # "number": pull.number,
-                            # "state": pull.state,
-                            # "title": pull.title,
-                            # "body": pull.body,
-                            # "url": pull.url,
-                            # "id": pull.id,
-                            # "node_id": pull.node_id,
-                            # "html_url": pull.html_url,
-                            # "diff_url": pull.diff_url,
-                            # "patch_url": pull.patch_url,
-                            # "issue_url": pull.issue_url,
-                            # "created_at": datetime_serializer(pull.created_at),
-                            # "updated_at": datetime_serializer(pull.updated_at),
-                            # "closed_at": datetime_serializer(pull.closed_at),
-                            # "merged_at": datetime_serializer(pull.merged_at),
-                            # "merge_commit_sha": pull.merge_commit_sha,
-                            # "labels": [label.name for label in pull.labels],
-                            # "draft": pull.draft,
-                            # "commits_url": pull.commits_url,
-                            # "review_comments_url": pull.review_comments_url,
-                            # "review_comment_url": pull.review_comment_url,
-                            # "comments_url": pull.comments_url,
-                            # "base": pull.base.raw_data,
+                            "number": pr_data["number"],
+                            "state": pr_data["state"],
+                            "title": pr_data["title"],
+                            "body": pr_data["body"],
+                            "url": pr_data["url"],
+                            "id": pr_data["id"],
+                            "node_id": pr_data["node_id"],
+                            "html_url": pr_data["html_url"],
+                            "diff_url": pr_data["diff_url"],
+                            "patch_url": pr_data["patch_url"],
+                            "issue_url": pr_data["issue_url"],
+                            "created_at": pr_data["created_at"],
+                            "updated_at": pr_data["updated_at"],
+                            "closed_at": pr_data["closed_at"],
+                            "merged_at": pr_data["merged_at"],
+                            "merge_commit_sha": pr_data["merge_commit_sha"],
+                            "labels": [
+                                label["name"] for label in pr_data.get("labels", [])
+                            ],
+                            "draft": pr_data.get("draft", False),
+                            "commits_url": pr_data["commits_url"],
+                            "review_comments_url": pr_data["review_comments_url"],
+                            "review_comment_url": pr_data["review_comment_url"],
+                            "comments_url": pr_data["comments_url"],
+                            "base": pr_data["base"],
                         },
                         ensure_ascii=False,
                     )
@@ -277,4 +313,12 @@ if __name__ == "__main__":
 
     tokens = get_tokens(args.tokens)
 
-    main(tokens, Path.cwd() / args.out_dir, args.org, args.repo, args.created_at, args.key_words, args.merged_after)
+    main(
+        tokens,
+        Path.cwd() / args.out_dir,
+        args.org,
+        args.repo,
+        args.created_at,
+        args.key_words,
+        args.merged_after,
+    )
