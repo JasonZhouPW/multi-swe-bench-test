@@ -202,12 +202,14 @@ def main(
         out_dir / f"{org}__{repo}_raw_dataset.jsonl", "a", encoding="utf-8"
     ) as file:
         for pr in tqdm(filtered_prs_with_issues, desc="Building Dataset"):
-            if (
-                pr["number"] in raw_dataset
-                or pr["number"] >= processed_number
-                or pr["number"] > failed_number
-            ):
-                continue
+            # if (
+            #     pr["number"] in raw_dataset
+            #     or pr["number"] >= processed_number
+            #     or pr["number"] > failed_number
+            # ):
+            #     print(pr["number"])
+            #     print(processed_number,failed_number)
+            #     continue
 
             for attempt in range(retry_attempts):
                 try:
@@ -218,6 +220,7 @@ def main(
                     pr["test_patch"] = test_patch
 
                     if fix_patch == "" or test_patch == "":
+                        print("empty fix or patch")
                         break
 
                     file.write(json.dumps(pr, ensure_ascii=False) + "\n")

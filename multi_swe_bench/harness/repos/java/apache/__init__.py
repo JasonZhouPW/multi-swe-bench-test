@@ -9,3 +9,4 @@ from multi_swe_bench.harness.repos.java.apache.kafka import *
 from multi_swe_bench.harness.repos.java.apache.pulsar import *
 from multi_swe_bench.harness.repos.java.apache.rocketmq import *
 from multi_swe_bench.harness.repos.java.apache.shardingsphere import *
+from multi_swe_bench.harness.repos.java.apache.beam import *

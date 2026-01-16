@@ -55,3 +55,4 @@ from multi_swe_bench.harness.repos.java.questdb.questdb import *
 from multi_swe_bench.harness.repos.java.redis.jedis import *
 from multi_swe_bench.harness.repos.java.redisson.redisson import *
 from multi_swe_bench.harness.repos.java.trinodb.trino import *
+from multi_swe_bench.harness.repos.java.apache.beam import *

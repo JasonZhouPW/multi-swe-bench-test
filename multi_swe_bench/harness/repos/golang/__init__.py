@@ -21,3 +21,4 @@ from multi_swe_bench.harness.repos.golang.fatedier.frp import *
 from multi_swe_bench.harness.repos.golang.openlistteam.openlist import *
 from multi_swe_bench.harness.repos.golang.gin_gonic.gin import *
 from multi_swe_bench.harness.repos.golang.gohugoio.hugo import *
+from multi_swe_bench.harness.repos.golang.moby.moby import *

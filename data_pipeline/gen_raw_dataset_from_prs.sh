@@ -31,13 +31,10 @@ for prs_jsonl in "${PRS_FILES[@]}"; do
     
     echo "=== Processing Pipeline for $org/$repo ==="
     
-    # Step 2: Filter PRs
-    echo "--- Step 2: Filtering PRs ---"
-    python3 -m multi_swe_bench.collect.filter_prs \
-        --tokens "$TOKEN_FILE" \
-        --out_dir "$OUT_DIR" \
-        --prs_file "$prs_jsonl" \
-        --skip-commit-message False
+    # Step 2: Skip Filter PRs (copy directly)
+    echo "--- Step 2: Skipping Filter PRs (copying directly) ---"
+    filtered_file="$OUT_DIR/${repo_key}_filtered_prs.jsonl"
+    cp "$prs_jsonl" "$filtered_file"
 
     # Step 3: Fetch related issues
     echo "--- Step 3: Fetching related issues ---"

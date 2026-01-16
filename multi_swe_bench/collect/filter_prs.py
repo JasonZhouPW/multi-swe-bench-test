@@ -96,7 +96,23 @@ def extract_resolved_issues(pull: dict) -> list[int]:
     if not resolved_issues:
         for kw in extra_keywords:
             if kw.lower() in text.lower():
-                resolved_issues.add(-1)
+                # Extract all #number from text
+                found_numbers = re.findall(r"\#(\d+)", text)
+                if found_numbers:
+                    for num_str in found_numbers:
+                        resolved_issues.add(int(num_str))
+                
+                # If still no issues, try to use issue_url
+                if not resolved_issues:
+                    issue_url = pull.get("issue_url") or ""
+                    if issue_url:
+                        issue_num = issue_url.split("/")[-1]
+                        if issue_num.isdigit():
+                            resolved_issues.add(int(issue_num))
+
+                # Fallback to -1 if still nothing
+                if not resolved_issues:
+                    resolved_issues.add(-1)
                 break
 
     return list(resolved_issues)

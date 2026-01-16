@@ -19,6 +19,7 @@ import re
 import sys
 from pathlib import Path
 
+import requests
 from github import Auth, Github
 from tqdm import tqdm
 
@@ -107,30 +108,57 @@ def main(tokens, out_dir: Path, filtered_prs_file: Path):
             else:
                 target_issues.add(issue_number)
 
-    g = get_github(random.choice(tokens))
+    tk = random.choice(tokens)
+    g = get_github(tk)
     r = g.get_repo(f"{org}/{repo}")
+
+    headers = {"Accept": "application/vnd.github.v3+json", "Authorization": f"token {tk}"}
 
     with open(
         out_dir / f"{org}__{repo}_related_issues.jsonl", "w", encoding="utf-8"
     ) as out_file:
-        for issue in tqdm(r.get_issues(state="all"), desc="Issues"):
-            if issue.number not in target_issues:
-                continue
+        # Write placeholder issues
+        for issue in placeholder_issues:
+            out_file.write(json.dumps(issue, ensure_ascii=False) + "\n")
 
-            out_file.write(
-                json.dumps(
-                    {
-                        "org": org,
-                        "repo": repo,
-                        "number": issue.number,
-                        "state": issue.state,
-                        "title": issue.title,
-                        "body": issue.body,
-                    },
-                    ensure_ascii=False,
+        if not target_issues:
+            print("No real target issues to fetch.")
+            return
+
+        # Fetch issues in chunks via Search API to avoid long URLs
+        target_list = sorted(list(target_issues))
+        chunk_size = 50
+        pbar = tqdm(total=len(target_list), desc="Issues")
+        for i in range(0, len(target_list), chunk_size):
+            chunk = target_list[i : i + chunk_size]
+            # Build query like: repo:org/repo is:issue number:123 number:456 ...
+            query_parts = [f"repo:{org}/{repo}", "is:issue"]
+            for num in chunk:
+                query_parts.append(f"number:{num}")
+            query = " ".join(query_parts)
+            
+            url = f"https://api.github.com/search/issues?q={query}"
+            resp = requests.get(url, headers=headers)
+            resp.raise_for_status()
+            data = resp.json()
+            items = data.get("items", [])
+            for item in items:
+                out_file.write(
+                    json.dumps(
+                        {
+                            "org": org,
+                            "repo": repo,
+                            "number": item["number"],
+                            "state": item["state"],
+                            "title": item["title"],
+                            "body": item["body"],
+                        },
+                        ensure_ascii=False,
+                    )
+                    + "\n",
                 )
-                + "\n",
-            )
+            pbar.update(len(chunk))
+        pbar.close()
 
 
 if __name__ == "__main__":

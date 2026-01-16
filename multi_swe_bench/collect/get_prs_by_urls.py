@@ -29,6 +29,25 @@ def fetch_pr_details(g: Github, org: str, repo_name: str, pr_number: int) -> dic
             return obj.isoformat()
         return obj
 
+    
+    # Extract resolved issues for compatibility with downstream scripts
+    from multi_swe_bench.collect.filter_prs import extract_resolved_issues
+    
+    # Convert commits to a format extract_resolved_issues expects
+    commits_for_filter = [
+        {"message": c.commit.message} for c in pull.get_commits()
+    ]
+    pr_dict_for_filter = {
+        "title": pull.title,
+        "body": pull.body,
+        "commits": commits_for_filter
+    }
+    resolved_issues = extract_resolved_issues(pr_dict_for_filter)
+    
+    # If no resolved issues found, add a placeholder [-1] to force it through the pipeline
+    if not resolved_issues:
+        resolved_issues = [-1]
+
     return {
         "org": org,
         "repo": repo_name,
@@ -55,7 +74,8 @@ def fetch_pr_details(g: Github, org: str, repo_name: str, pr_number: int) -> dic
         "review_comment_url": pull.review_comment_url,
         "comments_url": pull.comments_url,
         "base": pull.base.raw_data,
-        "commits": [c.raw_data for c in pull.get_commits()]
+        "commits": [c.raw_data for c in pull.get_commits()],
+        "resolved_issues": resolved_issues
     }
 
 def main():

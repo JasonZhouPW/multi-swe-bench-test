@@ -20,7 +20,7 @@ import requests
 from datetime import datetime,timezone
 from pathlib import Path
 
-from github import Auth, Github
+# from github import Auth, Github
 from tqdm import tqdm
 
 from multi_swe_bench.collect.util import get_tokens
@@ -48,9 +48,9 @@ def get_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def get_github(token) -> Github:
-    auth = Auth.Token(token)
-    return Github(auth=auth, per_page=100)
+# def get_github(token) -> Github:
+#     auth = Auth.Token(token)
+#     return Github(auth=auth, per_page=100)
 
 def is_relevant_pull(pull, key_words: str = None) -> bool:
     """
@@ -126,9 +126,9 @@ def main(tokens: list[str], out_dir: Path, org: str, repo: str, created_at: str 
     print("token:", tokens)    
     tk = random.choice(tokens)
     print("Using token:", tk)
-    g = get_github(tk)
+    # g = get_github(tk)
     print("org and repo:", org, repo)
-    r = g.get_repo(f"{org}/{repo}")
+    # r = g.get_repo(f"{org}/{repo}")
     print(f"Repository {org}/{repo} found.")
     def datetime_serializer(obj):
         if isinstance(obj, datetime):
@@ -137,7 +137,8 @@ def main(tokens: list[str], out_dir: Path, org: str, repo: str, created_at: str 
 
     with open(out_dir / f"{org}__{repo}_prs.jsonl", "w", encoding="utf-8") as file:
         # Use the Search API to fetch merged PRs with optional merged date filter
-        headers = {"Accept": "application/vnd.github.v3+json", "Authorization": f"token {tk}"}
+        # headers = {"Accept": "application/vnd.github.v3+json", "Authorization": f"{tk}"}
+        # print(f"headers:{headers}")
         # query = f"repo:{org}/{repo} is:pr is:merged"
         base_query_parts = [f"repo:{org}/{repo}", "is:pr", "is:merged"]
 
@@ -156,7 +157,10 @@ def main(tokens: list[str], out_dir: Path, org: str, repo: str, created_at: str 
         url = base_url
         fetched = 0
         while url:
-            resp = requests.get(url, headers=headers)
+            # resp = requests.get(url, headers=headers)
+            resp = requests.get(url)
+            print(f"resp:{resp}")
+
             resp.raise_for_status()
             data = resp.json()
             items = data.get("items", [])
@@ -164,7 +168,14 @@ def main(tokens: list[str], out_dir: Path, org: str, repo: str, created_at: str 
             for item in items:
                 pr_number = item["number"]
                 try:
-                    pull = r.get_pull(pr_number)
+                    pr_query_parts = [f"repo:{org}/{repo}", "is:pr", f"pr_number"]
+                    query = " ".join(base_query_parts) 
+                    pr_url = f"https://api.github.com/search/issues?q={query}"
+                    prresp = requests.get(pr_url)
+                    prdata = resp.json()
+                    pritems = data.get("pritems", [])
+
+                    # pull = r.get_pull(pr_number)
                 except Exception as e:
                     print(f"Failed to fetch PR #{pr_number} details: {e}")
                     continue
@@ -190,35 +201,60 @@ def main(tokens: list[str], out_dir: Path, org: str, repo: str, created_at: str 
                 #     print(f"Skipping PR #{pull.number} not matching keywords")
                 #     continue
 
-                print(f"Get PR #{pull.number} created at {pull.created_at} merged at {pull.merged_at} keywords {key_words} matched")
+                # print(f"Get PR #{pull.number} created at {pull.created_at} merged at {pull.merged_at} keywords {key_words} matched")
                 file.write(
                     json.dumps(
                         {
                             "org": org,
                             "repo": repo,
-                            "number": pull.number,
-                            "state": pull.state,
-                            "title": pull.title,
-                            "body": pull.body,
-                            "url": pull.url,
-                            "id": pull.id,
-                            "node_id": pull.node_id,
-                            "html_url": pull.html_url,
-                            "diff_url": pull.diff_url,
-                            "patch_url": pull.patch_url,
-                            "issue_url": pull.issue_url,
-                            "created_at": datetime_serializer(pull.created_at),
-                            "updated_at": datetime_serializer(pull.updated_at),
-                            "closed_at": datetime_serializer(pull.closed_at),
-                            "merged_at": datetime_serializer(pull.merged_at),
-                            "merge_commit_sha": pull.merge_commit_sha,
-                            "labels": [label.name for label in pull.labels],
-                            "draft": pull.draft,
-                            "commits_url": pull.commits_url,
-                            "review_comments_url": pull.review_comments_url,
-                            "review_comment_url": pull.review_comment_url,
-                            "comments_url": pull.comments_url,
-                            "base": pull.base.raw_data,
+                            "number": pritem["number"],
+                            "state": pritem["state"],
+                            "title": pritem["title"],
+                            "body": pritem["body"],
+                            "url": pritem["url"],
+                            "id": pritem["id"],
+                            "node_id": pritem["node_id"],
+                            "html_url": pritem["html_url"],
+                            "diff_url": pritem["diff_url"],
+                            "patch_url": pritem["patch_url"],
+                            "issue_url": pritem["issue_url"],
+                            "created_at": pritem["created_at"],
+                            "updated_at": pritem["updated_at"],
+                            "closed_at": pritem["closed_at"],
+                            "merged_at":pritem["merged_at"],
+                            "merge_commit_sha": pritem["merge_commit_sha"],
+                            "labels": [label["name"] for label in pull["labels"]],
+                            "draft": pritem["draft"],
+                            "commits_url": pritem["commits_url"],
+                            "review_comments_url": pritem["review_comments_url"],
+                            "review_comment_url": pritem["review_comment_url"],
+                            "comments_url": pritem["comments_url"],
+                            "base": pritem["base"]["raw_data"],
+                            #  "org": org,
+                            # "repo": repo,
+                            # "number": pull.number,
+                            # "state": pull.state,
+                            # "title": pull.title,
+                            # "body": pull.body,
+                            # "url": pull.url,
+                            # "id": pull.id,
+                            # "node_id": pull.node_id,
+                            # "html_url": pull.html_url,
+                            # "diff_url": pull.diff_url,
+                            # "patch_url": pull.patch_url,
+                            # "issue_url": pull.issue_url,
+                            # "created_at": datetime_serializer(pull.created_at),
+                            # "updated_at": datetime_serializer(pull.updated_at),
+                            # "closed_at": datetime_serializer(pull.closed_at),
+                            # "merged_at": datetime_serializer(pull.merged_at),
+                            # "merge_commit_sha": pull.merge_commit_sha,
+                            # "labels": [label.name for label in pull.labels],
+                            # "draft": pull.draft,
+                            # "commits_url": pull.commits_url,
+                            # "review_comments_url": pull.review_comments_url,
+                            # "review_comment_url": pull.review_comment_url,
+                            # "comments_url": pull.comments_url,
+                            # "base": pull.base.raw_data,
                         },
                         ensure_ascii=False,
                     )
