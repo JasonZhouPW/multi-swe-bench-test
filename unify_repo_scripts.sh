@@ -141,11 +141,11 @@ for RAW_FILE in "${FILES[@]}"; do
 
     echo "rm all docker images"
     # 1. stop all docker containers
-    docker container stop $(docker ps -aq) || true
-    # 2. remove all docker containers
-    docker container rm $(docker ps -aq) || true
-    # 3. remove all docker images
-    docker rmi $(docker images -q) || true
+    # docker container stop $(docker ps -aq) || true
+    # # 2. remove all docker containers
+    # docker container rm $(docker ps -aq) || true
+    # # 3. remove all docker images
+    # docker rmi $( docker images --format "table {{.Repository}}\t{{.ID}}" | grep -v "mswebench/nix_swe" | awk '{print $2}') || true
 done
 
 ##########################################

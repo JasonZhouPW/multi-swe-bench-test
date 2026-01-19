@@ -100,7 +100,9 @@ echo "   $TARGET_FILE"
 # Golang enhanced template (通用模板)
 ###################################################
 cat > "$TARGET_FILE" << 'EOF'
+import os
 import re
+import xml.etree.ElementTree as ET
 from typing import Optional, Union
 
 from multi_swe_bench.harness.image import Config, File, Image
@@ -124,6 +126,57 @@ class ImageBase(Image):
     def dependency(self) -> Union[str, "Image"]:
         return "ubuntu:22.04"
 
+    def get_java_version(self) -> str:
+        repo_path = f"./data/repos/{self.pr.org}/{self.pr.repo}"
+        if not os.path.exists(repo_path):
+            return "17"  # default
+        pom_path = os.path.join(repo_path, "pom.xml")
+        if os.path.exists(pom_path):
+            try:
+                tree = ET.parse(pom_path)
+                root = tree.getroot()
+                # find properties/java.version
+                for prop in root.findall(".//properties/java.version"):
+                    version = prop.text
+                    if version.startswith("1."):
+                        version = version[2:]  # 1.8 -> 8
+                    return version
+            except:
+                pass
+        gradle_path = os.path.join(repo_path, "build.gradle")
+        gradle_kts_path = os.path.join(repo_path, "build.gradle.kts")
+        for gradle_file in [gradle_path, gradle_kts_path]:
+            if os.path.exists(gradle_file):
+                with open(gradle_file, 'r') as f:
+                    content = f.read()
+                    # find sourceCompatibility = '17' or "17"
+                    match = re.search(r'sourceCompatibility\s*=\s*[\'"]([^\'"]+)[\'"]', content)
+                    if match:
+                        version = match.group(1)
+                        if version.startswith("1."):
+                            version = version[2:]
+                        return version
+                    # also check javaVersion
+                    match = re.search(r'javaVersion\s*=\s*[\'"]([^\'"]+)[\'"]', content)
+                    if match:
+                        version = match.group(1)
+                        if version.startswith("1."):
+                            version = version[2:]
+                        return version
+                    # check jvmTarget for Kotlin
+                    match = re.search(r'jvmTarget\s*=\s*[\'"]([^\'"]+)[\'"]', content)
+                    if match:
+                        version = match.group(1)
+                        if version.startswith("1."):
+                            version = version[2:]
+                        return version
+                    # check languageVersion for Gradle toolchain
+                    match = re.search(r'languageVersion\s*=\s*JavaLanguageVersion\.of\((\d+)\)', content)
+                    if match:
+                        version = match.group(1)
+                        return version
+        return "17"  # default
+
     def image_tag(self) -> str:
         return "base"
 
@@ -138,6 +191,8 @@ class ImageBase(Image):
         if isinstance(image_name, Image):
             image_name = image_name.image_full_name()
 
+        java_version = self.get_java_version()
+
         if self.config.need_clone:
             code = f"RUN git clone https://github.com/{self.pr.org}/{self.pr.repo}.git /home/{self.pr.repo}"
         else:
@@ -151,7 +206,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV LANG=C.UTF-8
 ENV LC_ALL=C.UTF-8
 WORKDIR /home/
-RUN apt-get update && apt-get install -y git openjdk-11-jdk
+RUN apt-get update && apt-get install -y git openjdk-{java_version}-jdk
 RUN apt-get install -y maven
 {code}
 
@@ -175,6 +230,57 @@ class ImageDefault(Image):
 
     def dependency(self) -> Image | None:
         return ImageBase(self.pr, self.config)
+
+    def get_java_version(self) -> str:
+        repo_path = f"./data/repos/{self.pr.org}/{self.pr.repo}"
+        if not os.path.exists(repo_path):
+            return "17"  # default
+        pom_path = os.path.join(repo_path, "pom.xml")
+        if os.path.exists(pom_path):
+            try:
+                tree = ET.parse(pom_path)
+                root = tree.getroot()
+                # find properties/java.version
+                for prop in root.findall(".//properties/java.version"):
+                    version = prop.text
+                    if version.startswith("1."):
+                        version = version[2:]  # 1.8 -> 8
+                    return version
+            except:
+                pass
+        gradle_path = os.path.join(repo_path, "build.gradle")
+        gradle_kts_path = os.path.join(repo_path, "build.gradle.kts")
+        for gradle_file in [gradle_path, gradle_kts_path]:
+            if os.path.exists(gradle_file):
+                with open(gradle_file, 'r') as f:
+                    content = f.read()
+                    # find sourceCompatibility = '17' or "17"
+                    match = re.search(r'sourceCompatibility\s*=\s*[\'"]([^\'"]+)[\'"]', content)
+                    if match:
+                        version = match.group(1)
+                        if version.startswith("1."):
+                            version = version[2:]
+                        return version
+                    # also check javaVersion
+                    match = re.search(r'javaVersion\s*=\s*[\'"]([^\'"]+)[\'"]', content)
+                    if match:
+                        version = match.group(1)
+                        if version.startswith("1."):
+                            version = version[2:]
+                        return version
+                    # check jvmTarget for Kotlin
+                    match = re.search(r'jvmTarget\s*=\s*[\'"]([^\'"]+)[\'"]', content)
+                    if match:
+                        version = match.group(1)
+                        if version.startswith("1."):
+                            version = version[2:]
+                        return version
+                    # check languageVersion for Gradle toolchain
+                    match = re.search(r'languageVersion\s*=\s*JavaLanguageVersion\.of\((\d+)\)', content)
+                    if match:
+                        version = match.group(1)
+                        return version
+        return "17"  # default
 
     def image_tag(self) -> str:
         return f"pr-{self.pr.number}"
