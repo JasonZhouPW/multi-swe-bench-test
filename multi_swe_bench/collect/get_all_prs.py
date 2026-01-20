@@ -84,7 +84,7 @@ def is_relevant_pull(pull, key_words: str = None) -> bool:
         return True
 
     # 默认关键词
-    default_keywords = {"refactor"}
+    default_keywords = {""}
 
     # 用户指定 key_words（允许多个关键词用逗号分隔）
     if key_words is not None and key_words != "":

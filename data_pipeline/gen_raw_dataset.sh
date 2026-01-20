@@ -58,6 +58,9 @@ shift $((OPTIND -1))
 if [ -z "$OUTPUT_DIR" ]; then
     # Replace spaces with underscores for the filesystem path
     KEY_WORDS_SAFE=$(echo "$KEY_WORDS" | tr ' ' '_')
+    if [ "$KEY_WORDS_SAFE" = "" ]; then
+        KEY_WORDS_SAFE="no_key_words"
+    fi
     OUTPUT_DIR="data/raw_datasets/${TODAY}/${KEY_WORDS_SAFE}"
 fi
 
