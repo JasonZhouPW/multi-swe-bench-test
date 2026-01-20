@@ -18,7 +18,7 @@ RETRY_ATTEMPTS=8
 CREATED_AT="2025-01-01" # default value
 TODAY="$(date '+%Y-%m-%d')"
 
-KEY_WORDS="bug fix"
+KEY_WORDS=""
 OUTPUT_DIR=""
 
 

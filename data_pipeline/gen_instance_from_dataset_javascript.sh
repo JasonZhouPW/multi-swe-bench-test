@@ -19,9 +19,10 @@ fi
 ###################################################
 LINE=$(head -n 1 "$RAW_JSON")
 
-ORG=$(echo "$LINE" | sed -n 's/.*"org": *"\([^"]*\)".*/\1/p')
-REPO=$(echo "$LINE" | sed -n 's/.*"repo": *"\([^"]*\)".*/\1/p')
-LANG_RAW=$(echo "$LINE" | sed -n 's/.*"language": *"\([^"]*\)".*/\1/p')
+ORG=$(echo "$LINE" | jq -r '.org')
+REPO=$(echo "$LINE" | jq -r '.repo')
+BASE_SHA=$(echo "$LINE" | jq -r '.base.sha')
+LANG_RAW=$(echo "$LINE" | jq -r '.language // "javascript"')
 
 if [ -z "$LANG_RAW" ]; then
     LANG_RAW="javascript"
@@ -75,6 +76,9 @@ ORG_PY=$(echo "$ORG" | tr '-' '_' | tr 'A-Z' 'a-z')
 REPO_PY=$(echo "$REPO" | tr '-' '_' | tr 'A-Z' 'a-z')
 
 CLASS_NAME=$(echo "$REPO_PY" | sed -E 's/(^|_)([a-z])/\U\2/g')
+
+repo_name="$REPO"
+pr_base_sha="$BASE_SHA"
 
 ###################################################
 # Create folder
@@ -188,14 +192,27 @@ class ImageDefault(Image):
             ),
             File(
                 ".",
+                "check_git_changes.sh",
+                """#!/bin/bash
+# Check if there are any uncommitted changes in the git repository
+if git status --porcelain | grep -q .; then
+    echo "Error: There are uncommitted changes in the repository."
+    git status
+    exit 1
+else
+    echo "Git repository is clean."
+fi""",
+            ),
+            File(
+                ".",
                 "prepare.sh",
                 """#!/bin/bash
 set -e
 
-cd /home/{pr.repo}
+cd /home/[[REPO_NAME]]
 git reset --hard
 bash /home/check_git_changes.sh
-git checkout {pr.base.sha}
+git checkout [[BASE_SHA]]
 bash /home/check_git_changes.sh
 
 # Injected setup commands
@@ -211,17 +228,17 @@ npm install eslint --save-dev""",
 cd /home/[[REPO_NAME]]
 npm test -- --verbose 
 
-""".replace("[[REPO_NAME]]", repo_name),
+""",
             ),
             File(
                 ".",
                 "test-run.sh",
                 """#!/bin/bash
-cd /home/{pr.repo}
+cd /home/[[REPO_NAME]]
 git apply  --exclude package.json --whitespace=nowarn /home/test.patch
 npm test -- --verbose  
 
-""".replace("[[REPO_NAME]]", repo_name),
+""",
             ),
             File(
                 ".",
@@ -229,11 +246,11 @@ npm test -- --verbose
                 """#!/bin/bash
 set -e
 
-cd /home/{pr.repo}
+cd /home/[[REPO_NAME]]
 git apply  --exclude package.json --whitespace=nowarn /home/test.patch /home/fix.patch
 npm test -- --verbose
 
-""".replace("[[REPO_NAME]]", repo_name),
+""",
             ),
         ]
 
@@ -288,21 +305,18 @@ class InstanceTemplate(Instance):
         import re
 
         # Regex patterns to match test cases
+        # For JavaScript/Mocha tests: "✔ test description" or "✗ test description"
         pattern1 = re.compile(
-            r"(tests/[^:]+::[^ ]+)\s+(PASSED|FAILED|SKIPPED|XFAIL)\b"
-        )  # Capture full test name (non-whitespace) after ::
+            r"^\s*[✔✗]\s+(.+)$"
+        )  # Capture test description after ✔ or ✗
         # Find all matches for pattern1
         for match in pattern1.finditer(log):
             test_name = match.group(1)
-            status = match.group(2)
-            if status == "PASSED":
-                passed_tests.add(test_name)
-            elif status == "FAILED":
+            # Check if the line contains ✗ (failure) or ✔ (pass)
+            if "✗" in match.string[match.start():match.end()]:
                 failed_tests.add(test_name)
-            elif status == "SKIPPED":
-                skipped_tests.add(test_name)
-            elif status == "XFAIL":
-                failed_tests.add(test_name)  # XFAIL is considered a failure
+            else:
+                passed_tests.add(test_name)
         parsed_results = {
             "passed_tests": passed_tests,
             "failed_tests": failed_tests,
@@ -331,9 +345,11 @@ echo "✅ Injected setup commands from $EXTRA_JSON"
 ###################################################
 # Inject org/repo into template
 ###################################################
-# Replace placeholder {{ORG}} {{REPO}}
+# Replace placeholder {{ORG}} {{REPO}} [[REPO_NAME]] [[BASE_SHA]]
 sed -i "" "s/{{ORG}}/$ORG/g"  "$TARGET_FILE" 2>/dev/null || sed -i "s/{{ORG}}/$ORG/g" "$TARGET_FILE"
 sed -i "" "s/{{REPO}}/$REPO/g" "$TARGET_FILE" 2>/dev/null || sed -i "s/{{REPO}}/$REPO/g" "$TARGET_FILE"
+sed -i "" "s/\[\[REPO_NAME\]\]/$repo_name/g" "$TARGET_FILE" 2>/dev/null || sed -i "s/\[\[REPO_NAME\]\]/$repo_name/g" "$TARGET_FILE"
+sed -i "" "s/\[\[BASE_SHA\]\]/$pr_base_sha/g" "$TARGET_FILE" 2>/dev/null || sed -i "s/\[\[BASE_SHA\]\]/$pr_base_sha/g" "$TARGET_FILE"
 
 rm -f "$TARGET_FILE.bak"
 
