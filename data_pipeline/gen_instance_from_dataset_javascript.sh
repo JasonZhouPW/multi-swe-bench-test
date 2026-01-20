@@ -307,7 +307,7 @@ class InstanceTemplate(Instance):
         # Regex patterns to match test cases
         # For JavaScript/Mocha tests: "✔ test description" or "✗ test description"
         pattern1 = re.compile(
-            r"^\s*[✔✗]\s+(.+)$"
+            r"^\s*[✔✗]\s+(.+)$", re.MULTILINE
         )  # Capture test description after ✔ or ✗
         # Find all matches for pattern1
         for match in pattern1.finditer(log):
