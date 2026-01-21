@@ -68,6 +68,9 @@ for RAW_FILE in "${FILES[@]}"; do
     if [ "$LANG_RAW" == "go" ]; then
         LANG_RAW="golang"
     fi
+    if [ "$LANG_RAW" == "c++" ]; then
+        LANG_RAW="cpp"
+    fi
     if [ -z "$LANG_RAW" ]; then
         LANG_RAW="golang"
     fi
