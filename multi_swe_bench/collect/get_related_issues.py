@@ -23,7 +23,7 @@ import requests
 from github import Auth, Github
 from tqdm import tqdm
 
-from multi_swe_bench.collect.util import get_tokens
+from multi_swe_bench.collect.util import get_tokens, make_request_with_retry
 
 
 def get_parser() -> argparse.ArgumentParser:
@@ -97,14 +97,16 @@ def main(tokens, out_dir: Path, filtered_prs_file: Path):
         for issue_number in pr["resolved_issues"]:
             if issue_number == -1:
                 # 占位 issue
-                placeholder_issues.append({
-                    "org": org,
-                    "repo": repo,
-                    "number": -1,
-                    "state": "unknown",
-                    "title": pr.get("title", ""),
-                    "body": pr.get("body", "")
-                })
+                placeholder_issues.append(
+                    {
+                        "org": org,
+                        "repo": repo,
+                        "number": -1,
+                        "state": "unknown",
+                        "title": pr.get("title", ""),
+                        "body": pr.get("body", ""),
+                    }
+                )
             else:
                 target_issues.add(issue_number)
 
@@ -112,7 +114,10 @@ def main(tokens, out_dir: Path, filtered_prs_file: Path):
     g = get_github(tk)
     r = g.get_repo(f"{org}/{repo}")
 
-    headers = {"Accept": "application/vnd.github.v3+json", "Authorization": f"token {tk}"}
+    headers = {
+        "Accept": "application/vnd.github.v3+json",
+        "Authorization": f"token {tk}",
+    }
 
     with open(
         out_dir / f"{org}__{repo}_related_issues.jsonl", "w", encoding="utf-8"
@@ -136,9 +141,20 @@ def main(tokens, out_dir: Path, filtered_prs_file: Path):
             for num in chunk:
                 query_parts.append(f"number:{num}")
             query = " ".join(query_parts)
-            
+
             url = f"https://api.github.com/search/issues?q={query}"
-            resp = requests.get(url, headers=headers)
+
+            def make_search_request():
+                return requests.get(url, headers=headers)
+
+            resp = make_request_with_retry(
+                make_search_request,
+                max_retries=5,
+                initial_backoff=1.0,
+                backoff_multiplier=2.0,
+                max_backoff=60.0,
+                verbose=True,
+            )
             resp.raise_for_status()
             data = resp.json()
             items = data.get("items", [])

@@ -1,0 +1,365 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+RAW_JSON="$1"
+EXTRA_JSON="${2:-}"   # optional parameter
+
+if [ ! -f "$RAW_JSON" ]; then
+    echo "❌ raw dataset not found: $RAW_JSON"
+    exit 1
+fi
+
+# if [ ! -f "$EXTRA_JSON" ]; then
+#     echo "❌ extra JSON not found: $EXTRA_JSON"
+#     exit 1
+# fi
+
+###################################################
+# Extract fields
+###################################################
+LINE=$(head -n 1 "$RAW_JSON")
+
+ORG=$(echo "$LINE" | jq -r '.org')
+REPO=$(echo "$LINE" | jq -r '.repo')
+BASE_SHA=$(echo "$LINE" | jq -r '.base.sha')
+LANG_RAW=$(echo "$LINE" | jq -r '.language // "typescript"')
+
+if [ -z "$LANG_RAW" ]; then
+    LANG_RAW="typescript"
+fi
+
+
+LANG=$(echo "$LANG_RAW" | tr 'A-Z' 'a-z')
+
+########################################
+# Build setup_commands block
+########################################
+if [ -n "$EXTRA_JSON" ] && [ -f "$EXTRA_JSON" ]; then
+    SETUP_COMMANDS=$(jq -r '(.setup_commands // []) | join("\n")' "$EXTRA_JSON")
+else
+    SETUP_COMMANDS=""
+fi
+export SETUP_COMMANDS
+
+###################################################
+# Map language → folder
+###################################################
+case "$LANG" in
+    go|golang)
+        LANG_DIR="golang"
+        ;;
+    python|py)
+        LANG_DIR="python"
+        ;;
+    javascript|js|node|nodejs)
+        LANG_DIR="javascript"
+        ;;
+    rust)
+        LANG_DIR="rust"
+        ;;
+    java)
+        LANG_DIR="java"
+        ;;
+    cpp|c++|c)
+        LANG_DIR="cpp"
+        ;;
+    typescript|TypeScript|ts)
+        LANG_DIR="typescript"
+        ;;
+    *)
+        echo "❌ Unsupported language: $LANG"
+        exit 1
+        ;;
+esac
+
+###################################################
+# Normalize package names
+###################################################
+ORG_PY=$(echo "$ORG" | tr '-' '_' | tr 'A-Z' 'a-z')
+REPO_PY=$(echo "$REPO" | tr '-' '_' | tr 'A-Z' 'a-z')
+
+CLASS_NAME=$(echo "$REPO_PY" | sed -E 's/(^|_)([a-z])/\U\2/g')
+
+repo_name="$REPO"
+pr_base_sha="$BASE_SHA"
+
+###################################################
+# Create folder
+###################################################
+BASE_DIR="./multi_swe_bench/harness/repos/$LANG_DIR/$ORG_PY"
+mkdir -p "$BASE_DIR"
+
+TARGET_FILE="$BASE_DIR/${REPO_PY}.py"
+
+echo "📄 Generating instance file:"
+echo "   $TARGET_FILE"
+
+###################################################
+# Golang enhanced template (通用模板)
+###################################################
+cat > "$TARGET_FILE" << 'EOF'
+import re
+import json
+from typing import Optional, Union
+
+from multi_swe_bench.harness.image import Config, File, Image
+from multi_swe_bench.harness.instance import Instance, TestResult
+from multi_swe_bench.harness.pull_request import PullRequest
+
+
+class ImageBase(Image):
+    def __init__(self, pr: PullRequest, config: Config):
+        self._pr = pr
+        self._config = config
+
+    @property
+    def pr(self) -> PullRequest:
+        return self._pr
+
+    @property
+    def config(self) -> Config:
+        return self._config
+
+    def dependency(self) -> Union[str, "Image"]:
+        return "node:20"
+
+    def image_tag(self) -> str:
+        return "base"
+
+    def workdir(self) -> str:
+        return "base"
+
+    def files(self) -> list[File]:
+        return []
+
+    def dockerfile(self) -> str:
+        image_name = self.dependency()
+        if isinstance(image_name, Image):
+            image_name = image_name.image_full_name()
+
+        if self.config.need_clone:
+            code = f"RUN git clone https://github.com/{self.pr.org}/{self.pr.repo}.git /home/{self.pr.repo}"
+        else:
+            code = f"COPY {self.pr.repo} /home/{self.pr.repo}"
+
+        return f"""FROM {image_name}
+
+{self.global_env}
+
+WORKDIR /home/
+
+{code}
+
+{self.clear_env}
+
+"""
+
+
+class ImageDefault(Image):
+    def __init__(self, pr: PullRequest, config: Config):
+        self._pr = pr
+        self._config = config
+
+    @property
+    def pr(self) -> PullRequest:
+        return self._pr
+
+    @property
+    def config(self) -> Config:
+        return self._config
+
+    def dependency(self) -> Image | None:
+        return ImageBase(self.pr, self.config)
+
+    def image_prefix(self) -> str:
+        return "envagent"
+
+    def image_tag(self) -> str:
+        return f"pr-{self.pr.number}"
+
+    def workdir(self) -> str:
+        return f"pr-{self.pr.number}"
+
+    def files(self) -> list[File]:
+        repo_name = self.pr.repo
+        return [
+            File(
+                ".",
+                "fix.patch",
+                f"{self.pr.fix_patch}",
+            ),
+            File(
+                ".",
+                "test.patch",
+                f"{self.pr.test_patch}",
+            ),
+            File(
+                ".",
+                "check_git_changes.sh",
+                """#!/bin/bash
+# Check if there are any uncommitted changes in the git repository
+if git status --porcelain | grep -q .; then
+    echo "Error: There are uncommitted changes in the repository."
+    git status
+    exit 1
+else
+    echo "Git repository is clean."
+fi""",
+            ),
+            File(
+                ".",
+                "prepare.sh",
+                """#!/bin/bash
+set -e
+
+cd /home/[[REPO_NAME]]
+git reset --hard
+bash /home/check_git_changes.sh
+git checkout [[BASE_SHA]]
+bash /home/check_git_changes.sh
+
+# Injected setup commands
+
+
+if [ -f package.json ] && grep -q '"packageManager"' package.json && grep -q 'pnpm' package.json; then
+    npm install -g pnpm@latest-10 || true
+    pnpm install || true
+    pnpm add eslint --save-dev
+else
+    npm ci || true
+    npm install eslint --save-dev
+fi""",
+            ),
+            File(
+                ".",
+                "run.sh",
+                """#!/bin/bash
+cd /home/[[REPO_NAME]]
+npm test
+
+""",
+            ),
+            File(
+                ".",
+                "test-run.sh",
+                """#!/bin/bash
+cd /home/[[REPO_NAME]]
+git apply  --exclude package.json --whitespace=nowarn /home/test.patch
+npm test
+
+""",
+            ),
+            File(
+                ".",
+                "fix-run.sh",
+                """#!/bin/bash
+set -e
+
+cd /home/[[REPO_NAME]]
+git apply  --exclude package.json --whitespace=nowarn /home/test.patch /home/fix.patch
+npm test
+
+""",
+            ),
+        ]
+
+    def dockerfile(self) -> str:
+        parent = self.dependency()
+        name = parent.image_name()
+        tag = parent.image_tag()
+
+        copy_cmds = "".join([f"COPY {f.name} /home/\n" for f in self.files()])
+
+        return f"""FROM {name}:{tag}
+
+{self.global_env}
+
+{copy_cmds}
+
+RUN bash /home/prepare.sh
+
+{self.clear_env}
+
+"""
+
+
+@Instance.register("{{ORG}}", "{{REPO}}")
+class InstanceTemplate(Instance):
+    def __init__(self, pr: PullRequest, config: Config, *args, **kwargs):
+        super().__init__()
+        self._pr = pr
+        self._config = config
+
+    @property
+    def pr(self) -> PullRequest:
+        return self._pr
+
+    def dependency(self) -> Optional[Image]:
+        return ImageDefault(self.pr, self._config)
+
+    def run(self, cmd: str = "") -> str:
+        return cmd or "bash /home/run.sh"
+
+    def test_patch_run(self, cmd: str = "") -> str:
+        return cmd or "bash /home/test-run.sh"
+
+    def fix_patch_run(self, cmd: str = "") -> str:
+        return cmd or "bash /home/fix-run.sh"
+
+    def parse_log(self, log: str) -> TestResult:
+        # Parse the log content and extract test execution results.
+        passed_tests = set()  # Tests that passed successfully
+        failed_tests = set()  # Tests that failed
+        skipped_tests = set()  # Tests that were skipped
+        import re
+
+        # Regex patterns to match test cases
+        # For JavaScript/Mocha tests: "✔ test description" or "✗ test description"
+        pattern1 = re.compile(
+            r"^\s*[✔✗]\s+(.+)$", re.MULTILINE
+        )  # Capture test description after ✔ or ✗
+        # Find all matches for pattern1
+        for match in pattern1.finditer(log):
+            test_name = match.group(1)
+            # Check if the line contains ✗ (failure) or ✔ (pass)
+            if "✗" in match.string[match.start():match.end()]:
+                failed_tests.add(test_name)
+            else:
+                passed_tests.add(test_name)
+        parsed_results = {
+            "passed_tests": passed_tests,
+            "failed_tests": failed_tests,
+            "skipped_tests": skipped_tests,
+        }
+
+        return TestResult(
+            passed_count=len(passed_tests),
+            failed_count=len(failed_tests),
+            skipped_count=len(skipped_tests),
+            passed_tests=passed_tests,
+            failed_tests=failed_tests,
+            skipped_tests=skipped_tests,
+        )
+EOF
+
+########################################
+# Replace placeholder with commands
+########################################
+# macOS + Linux compatible sed
+perl -0777 -i.bak -pe '
+    s/__SETUP_COMMANDS_BLOCK__/$ENV{SETUP_COMMANDS}/g
+' "$TARGET_FILE"
+
+echo "✅ Injected setup commands from $EXTRA_JSON"
+###################################################
+# Inject org/repo into template
+###################################################
+# Replace placeholder {{ORG}} {{REPO}} [[REPO_NAME]] [[BASE_SHA]]
+sed -i "" "s/{{ORG}}/$ORG/g"  "$TARGET_FILE" 2>/dev/null || sed -i "s/{{ORG}}/$ORG/g" "$TARGET_FILE"
+sed -i "" "s/{{REPO}}/$REPO/g" "$TARGET_FILE" 2>/dev/null || sed -i "s/{{REPO}}/$REPO/g" "$TARGET_FILE"
+sed -i "" "s/\[\[REPO_NAME\]\]/$repo_name/g" "$TARGET_FILE" 2>/dev/null || sed -i "s/\[\[REPO_NAME\]\]/$repo_name/g" "$TARGET_FILE"
+sed -i "" "s/\[\[BASE_SHA\]\]/$pr_base_sha/g" "$TARGET_FILE" 2>/dev/null || sed -i "s/\[\[BASE_SHA\]\]/$pr_base_sha/g" "$TARGET_FILE"
+
+rm -f "$TARGET_FILE.bak"
+
+echo "✅ Generated: $TARGET_FILE"

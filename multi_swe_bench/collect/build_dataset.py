@@ -25,7 +25,11 @@ import requests
 from tqdm import tqdm
 from unidiff import PatchSet
 
-from multi_swe_bench.collect.util import get_tokens, optional_int
+from multi_swe_bench.collect.util import (
+    get_tokens,
+    optional_int,
+    make_request_with_retry,
+)
 
 
 def get_parser() -> argparse.ArgumentParser:
@@ -66,7 +70,19 @@ def get_parser() -> argparse.ArgumentParser:
 
 def extract_patches(pull: dict, token: str) -> tuple[str, str]:
     headers = {"Authorization": f"Bearer {token}"}
-    patch = requests.get(pull["diff_url"], headers=headers).text
+
+    def make_patch_request():
+        return requests.get(pull["diff_url"], headers=headers)
+
+    response = make_request_with_retry(
+        make_patch_request,
+        max_retries=5,
+        initial_backoff=1.0,
+        backoff_multiplier=2.0,
+        max_backoff=60.0,
+        verbose=True,
+    )
+    patch = response.text
     test_patch = ""
     fix_patch = ""
     if (
@@ -111,7 +127,18 @@ def extract_patches_from_compare(pull: dict, token: str) -> tuple[str, str]:
     compare_url = (
         f"https://api.github.com/repos/{org}/{repo}/compare/{base_sha}...{head_sha}"
     )
-    response = requests.get(compare_url, headers=headers)
+
+    def make_compare_request():
+        return requests.get(compare_url, headers=headers)
+
+    response = make_request_with_retry(
+        make_compare_request,
+        max_retries=5,
+        initial_backoff=1.0,
+        backoff_multiplier=2.0,
+        max_backoff=60.0,
+        verbose=True,
+    )
     if response.status_code != 200:
         raise Exception(
             f"Failed to fetch patch: {response.status_code} - {response.text[:300]}"
@@ -188,7 +215,7 @@ def main(
         failed_number = None
     else:
         failed_number = max(pr["number"] for pr in filtered_prs_with_issues)
-        #failed_number = max([pr["number"] for pr in filtered_prs_with_issues])
+        # failed_number = max([pr["number"] for pr in filtered_prs_with_issues])
 
     log_file = out_dir / f"{org}__{repo}_raw_dataset.log"
     last_failed_number = get_failed_number(log_file)

@@ -23,7 +23,7 @@ from pathlib import Path
 # from github import Auth, Github
 from tqdm import tqdm
 
-from multi_swe_bench.collect.util import get_tokens
+from multi_swe_bench.collect.util import get_tokens, make_request_with_retry
 
 
 def get_parser() -> argparse.ArgumentParser:
@@ -186,11 +186,21 @@ def main(
         url = base_url
         fetched = 0
         while url:
-            # resp = requests.get(url, headers=headers)
             print(f"url:{url}")
-            resp = requests.get(url)
-            print(f"resp:{resp}")
 
+            def make_search_request():
+                return requests.get(url, headers=headers)
+
+            resp = make_request_with_retry(
+                make_search_request,
+                max_retries=5,
+                initial_backoff=1.0,
+                backoff_multiplier=2.0,
+                max_backoff=60.0,
+                verbose=True,
+            )
+
+            print(f"resp:{resp}")
             resp.raise_for_status()
             data = resp.json()
             items = data.get("items", [])
@@ -202,7 +212,18 @@ def main(
                     pr_url = (
                         f"https://api.github.com/repos/{org}/{repo}/pulls/{pr_number}"
                     )
-                    pr_resp = requests.get(pr_url, headers=headers)
+
+                    def make_pr_request():
+                        return requests.get(pr_url, headers=headers)
+
+                    pr_resp = make_request_with_retry(
+                        make_pr_request,
+                        max_retries=5,
+                        initial_backoff=1.0,
+                        backoff_multiplier=2.0,
+                        max_backoff=60.0,
+                        verbose=True,
+                    )
                     pr_resp.raise_for_status()
                     pr_data = pr_resp.json()
 

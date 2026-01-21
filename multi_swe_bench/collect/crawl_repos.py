@@ -21,7 +21,7 @@ import time
 from tqdm import tqdm
 from typing import Optional, List, Dict, Any
 import random
-from multi_swe_bench.collect.util import get_tokens
+from multi_swe_bench.collect.util import get_tokens, make_request_with_retry
 
 
 class GitHubScraper:
@@ -38,7 +38,7 @@ class GitHubScraper:
         output_format: str = "console",
         token: Optional[str] = None,
         output_dir: str = ".",
-        created:str = "2025-11-20",
+        created: str = "2025-11-20",
     ) -> None:
         """
         Fetch GitHub repositories sorted by stars
@@ -112,35 +112,19 @@ class GitHubScraper:
     def _make_request_with_retry(
         self, url: str, headers: Dict[str, str], params: Dict[str, Any]
     ) -> requests.Response:
-        """Make HTTP request with retry logic"""
-        last_error: Optional[Exception] = None
-        for attempt in range(self.max_retries):
-            try:
-                response: requests.Response = requests.get(
-                    url, headers=headers, params=params
-                )
-                response.raise_for_status()
+        """Make HTTP request with retry logic and rate limit handling"""
 
-                if int(response.headers.get("X-RateLimit-Remaining", 1)) <= 1:
-                    reset_time = int(response.headers.get("X-RateLimit-Reset", 0))
-                    sleep_time = max(reset_time - time.time(), 0) + 5
-                    print(
-                        f"\nApproaching rate limit, waiting {sleep_time:.1f} seconds..."
-                    )
-                    time.sleep(sleep_time)
-                    continue
+        def make_request():
+            return requests.get(url, headers=headers, params=params)
 
-                return response
-
-            except requests.exceptions.RequestException as e:
-                last_error = e
-                if attempt < self.max_retries - 1:
-                    print(
-                        f"\nRetry {attempt + 1}/{self.max_retries} in {self.retry_delay} seconds..."
-                    )
-                    time.sleep(self.retry_delay)
-
-        raise last_error if last_error else Exception("Request failed after retries")
+        return make_request_with_retry(
+            make_request,
+            max_retries=self.max_retries,
+            initial_backoff=self.retry_delay,
+            backoff_multiplier=2.0,
+            max_backoff=60.0,
+            verbose=True,
+        )
 
     def _print_results(self, repositories: List[Dict[str, Any]], language: str) -> None:
         """Print results to console"""
@@ -236,7 +220,7 @@ def main() -> None:
         type=str,
         default=".",
         help="Directory to save CSV files (will be created if doesn't exist)",
-    ) 
+    )
     parser.add_argument(
         "--created",
         type=str,

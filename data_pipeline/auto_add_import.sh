@@ -62,6 +62,9 @@ case "$LANG" in
     cpp|c++|c)
         LANG_DIR="cpp"
         ;;
+    typescript|TypeScript|ts)
+        LANG_DIR="typescript"
+        ;;
     *)
         echo "❌ Unsupported language: $LANG_RAW"
         exit 1
