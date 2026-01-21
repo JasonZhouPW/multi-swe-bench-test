@@ -22,6 +22,7 @@ LINE=$(head -n 1 "$RAW_JSON")
 ORG=$(echo "$LINE" | sed -n 's/.*"org": *"\([^"]*\)".*/\1/p')
 REPO=$(echo "$LINE" | sed -n 's/.*"repo": *"\([^"]*\)".*/\1/p')
 LANG_RAW=$(echo "$LINE" | sed -n 's/.*"language": *"\([^"]*\)".*/\1/p')
+PR_BASE_SHA=$(echo "$LINE" | sed -n 's/.*"base":[^}]*"sha": *"\([^"]*\)".*/\1/p')
 
 if [ -z "$LANG_RAW" ]; then
     LANG_RAW="python"
@@ -177,18 +178,47 @@ class ImageDefault(Image):
         return [
             File(
                 ".",
-                "fix.patch",
-                f"{self.pr.fix_patch}",
-            ),
-            File(
-                ".",
-                "test.patch",
-                f"{self.pr.test_patch}",
-            ),
-            File(
-                ".",
                 "prepare.sh",
-                """ls -la
+                """#!/bin/bash
+set -e
+
+cd /home/[[REPO_NAME]]
+echo "Starting prepare.sh"
+
+# Install git first since it may not be available in base image
+if ! command -v git >/dev/null 2>&1; then
+    echo "Installing git..."
+    if command -v apt-get >/dev/null 2>&1; then
+        apt-get update && apt-get install -y git || true
+    elif command -v yum >/dev/null 2>&1; then
+        yum install -y git || true
+    elif command -v apk >/dev/null 2>&1; then
+        apk add git || true
+    fi
+fi
+
+git reset --hard
+bash /home/check_git_changes.sh
+echo "Git reset done"
+
+git checkout __BASE_SHA__
+bash /home/check_git_changes.sh
+echo "Git checkout done"
+
+# Injected setup commands
+
+# Install system dependencies if apt-get is available
+if command -v apt-get >/dev/null 2>&1; then
+    apt-get update && apt-get install -y gcc g++ make libpq-dev python3-dev || true
+elif command -v yum >/dev/null 2>&1; then
+    yum install -y gcc gcc-c++ make postgresql-devel || true
+fi
+###ACTION_DELIMITER###
+pip install --upgrade pip setuptools wheel || true
+###ACTION_DELIMITER###
+if [ -f requirements.txt ]; then
+    pip install -r requirements.txt || true
+fi
 ###ACTION_DELIMITER###
 pip install -e . || true
 ###ACTION_DELIMITER###
@@ -197,12 +227,27 @@ pip install pytest coverage colorama || true
 echo 'coverage run -m pytest -v --tb=short --basetemp=/tmp tests/' > test_commands.sh
 ###ACTION_DELIMITER###
 
-# Injected setup commands
-__SETUP_COMMANDS_BLOCK__
-
 cat test_commands.sh
 ###ACTION_DELIMITER###
-bash test_commands.sh || true""",
+bash test_commands.sh || true""".replace("[[REPO_NAME]]", repo_name),
+            ),
+            File(
+                ".",
+                "test.patch",
+                f"{self.pr.test_patch}",
+            ),
+            File(
+                ".",
+                "check_git_changes.sh",
+                """#!/bin/bash
+# Check if there are any uncommitted changes in the git repository
+if git status --porcelain | grep -q .; then
+    echo "Error: There are uncommitted changes in the repository."
+    git status
+    exit 1
+else
+    echo "Git repository is clean."
+fi""",
             ),
             File(
                 ".",
@@ -217,10 +262,23 @@ coverage run -m pytest -v --tb=short --basetemp=/tmp tests/
                 ".",
                 "test-run.sh",
                 """#!/bin/bash
+set -e
+
+# Ensure git is available
+if ! command -v git >/dev/null 2>&1; then
+    if command -v apt-get >/dev/null 2>&1; then
+        apt-get update && apt-get install -y git || true
+    elif command -v yum >/dev/null 2>&1; then
+        yum install -y git || true
+    elif command -v apk >/dev/null 2>&1; then
+        apk add git || true
+    fi
+fi
+
 cd /home/[[REPO_NAME]]
-if ! git -C /home/[[REPO_NAME]] apply --whitespace=nowarn /home/test.patch; then
-    echo "Error: git apply failed" >&2
-    exit 1  
+if ! git apply --whitespace=nowarn /home/test.patch 2>/dev/null; then
+    echo "Warning: git apply failed, trying alternative method..."
+    exit 1
 fi
 coverage run -m pytest -v --tb=short --basetemp=/tmp tests/
 
@@ -230,10 +288,23 @@ coverage run -m pytest -v --tb=short --basetemp=/tmp tests/
                 ".",
                 "fix-run.sh",
                 """#!/bin/bash
+set -e
+
+# Ensure git is available
+if ! command -v git >/dev/null 2>&1; then
+    if command -v apt-get >/dev/null 2>&1; then
+        apt-get update && apt-get install -y git || true
+    elif command -v yum >/dev/null 2>&1; then
+        yum install -y git || true
+    elif command -v apk >/dev/null 2>&1; then
+        apk add git || true
+    fi
+fi
+
 cd /home/[[REPO_NAME]]
-if ! git -C /home/[[REPO_NAME]] apply --whitespace=nowarn  /home/test.patch /home/fix.patch; then
-    echo "Error: git apply failed" >&2
-    exit 1  
+if ! git apply --whitespace=nowarn /home/test.patch /home/fix.patch 2>/dev/null; then
+    echo "Warning: git apply failed, trying alternative method..."
+    exit 1
 fi
 coverage run -m pytest -v --tb=short --basetemp=/tmp tests/
 
@@ -307,6 +378,20 @@ class InstanceTemplate(Instance):
                 skipped_tests.add(test_name)
             elif status == "XFAIL":
                 failed_tests.add(test_name)  # XFAIL is considered a failure
+
+        # Handle pytest ERROR cases (e.g., import errors during collection)
+        # Format: "ERROR tests/test_module.py"
+        error_pattern = re.compile(r"^ERROR\s+(tests/[^:]+::[^ ]+)\b", re.MULTILINE)
+        for match in error_pattern.finditer(log):
+            test_name = match.group(1)
+            failed_tests.add(test_name)
+
+        # Also capture "ERROR tests/test_module.py" without the test name
+        error_file_pattern = re.compile(r"^ERROR\s+(tests/[^.]+\.py)\b", re.MULTILINE)
+        for match in error_file_pattern.finditer(log):
+            test_file = match.group(1)
+            failed_tests.add(test_file)
+
         parsed_results = {
             "passed_tests": passed_tests,
             "failed_tests": failed_tests,
@@ -333,11 +418,12 @@ perl -0777 -i.bak -pe '
 
 echo "✅ Injected setup commands from $EXTRA_JSON"
 ###################################################
-# Inject org/repo into template
+# Inject org/repo/base_sha into template
 ###################################################
-# Replace placeholder {{ORG}} {{REPO}}
+# Replace placeholder {{ORG}} {{REPO}} __BASE_SHA__
 sed -i "" "s/{{ORG}}/$ORG/g"  "$TARGET_FILE" 2>/dev/null || sed -i "s/{{ORG}}/$ORG/g" "$TARGET_FILE"
 sed -i "" "s/{{REPO}}/$REPO/g" "$TARGET_FILE" 2>/dev/null || sed -i "s/{{REPO}}/$REPO/g" "$TARGET_FILE"
+sed -i "" "s/__BASE_SHA__/$PR_BASE_SHA/g" "$TARGET_FILE" 2>/dev/null || sed -i "s/__BASE_SHA__/$PR_BASE_SHA/g" "$TARGET_FILE"
 
 rm -f "$TARGET_FILE.bak"
 
