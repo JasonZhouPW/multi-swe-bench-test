@@ -213,22 +213,36 @@ fi""",
 set -e
 
 cd /home/[[REPO_NAME]]
+echo "Starting prepare.sh"
 git reset --hard
+echo "Git reset done"
 bash /home/check_git_changes.sh
+echo "First git check done"
 git checkout [[BASE_SHA]]
+echo "Git checkout done"
 bash /home/check_git_changes.sh
+echo "Second git check done"
 
 # Injected setup commands
 
 
 if [ -f package.json ] && grep -q '"packageManager"' package.json && grep -q 'pnpm' package.json; then
+    echo "Using pnpm"
     npm install -g pnpm@latest-10 || true
+    echo "Pnpm installed"
     pnpm install || true
-    pnpm add eslint --save-dev
+    echo "Pnpm install done"
+    pnpm add eslint --save-dev -w || true
+    echo "Eslint added with pnpm"
 else
+    echo "Using npm"
     npm ci || true
+    echo "Npm ci done"
     npm install eslint --save-dev
-fi""",
+    echo "Eslint added with npm"
+fi
+echo "Prepare.sh completed successfully"
+""",
             ),
             File(
                 ".",
@@ -307,30 +321,49 @@ class InstanceTemplate(Instance):
         return cmd or "bash /home/fix-run.sh"
 
     def parse_log(self, log: str) -> TestResult:
-        # Parse the log content and extract test execution results.
-        passed_tests = set()  # Tests that passed successfully
-        failed_tests = set()  # Tests that failed
-        skipped_tests = set()  # Tests that were skipped
+        passed_tests = set()
+        failed_tests = set()
+        skipped_tests = set()
         import re
 
-        # Regex patterns to match test cases
-        # For JavaScript/Mocha tests: "✔ test description" or "✗ test description"
-        pattern1 = re.compile(
-            r"^\s*[✔✗]\s+(.+)$", re.MULTILINE
-        )  # Capture test description after ✔ or ✗
-        # Find all matches for pattern1
-        for match in pattern1.finditer(log):
-            test_name = match.group(1)
-            # Check if the line contains ✗ (failure) or ✔ (pass)
-            if "✗" in match.string[match.start():match.end()]:
-                failed_tests.add(test_name)
-            else:
+        # Track test names - failed takes precedence over passed
+        test_status = {}
+
+        # Failed tests first (✖)
+        failed_pattern = re.compile(
+            r"^\s*✖\s+(.+?)(?:\s*\(\d+(?:\.\d+)?\s*ms\))?$", re.MULTILINE
+        )
+
+        for match in failed_pattern.finditer(log):
+            test_name = match.group(1).strip()
+            test_status[test_name] = 'failed'
+
+        # Vitest format: "✓ filename.test.ts (X tests) XXms"
+        vitest_pattern = re.compile(
+            r".*[✓✔]\s+([a-zA-Z_/-]+\.test\.(ts|js))\s+\(\d+\s*tests?\)\s+\d+\.?\d*ms"
+        )
+
+        for match in vitest_pattern.finditer(log):
+            test_file = match.group(1).strip()
+            if test_file not in test_status:
+                test_status[test_file] = 'passed'
+
+        # Standard test framework format (✔ test name XXms)
+        standard_pattern = re.compile(
+            r"^\s*✔\s+(.+?)(?:\s*\(\d+(?:\.\d+)?\s*ms\))?$", re.MULTILINE
+        )
+
+        for match in standard_pattern.finditer(log):
+            test_name = match.group(1).strip()
+            if test_name not in test_status:
+                test_status[test_name] = 'passed'
+
+        # Separate into passed and failed sets
+        for test_name, status in test_status.items():
+            if status == 'passed':
                 passed_tests.add(test_name)
-        parsed_results = {
-            "passed_tests": passed_tests,
-            "failed_tests": failed_tests,
-            "skipped_tests": skipped_tests,
-        }
+            else:
+                failed_tests.add(test_name)
 
         return TestResult(
             passed_count=len(passed_tests),
