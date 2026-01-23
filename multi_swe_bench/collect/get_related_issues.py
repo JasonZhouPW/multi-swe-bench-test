@@ -94,9 +94,21 @@ def main(tokens, out_dir: Path, filtered_prs_file: Path):
     placeholder_issues = []
 
     for pr in filtered_prs:
+        if "resolved_issues" not in pr or not pr["resolved_issues"]:
+            placeholder_issues.append(
+                {
+                    "org": org,
+                    "repo": repo,
+                    "number": -1,
+                    "state": "unknown",
+                    "title": pr.get("title", ""),
+                    "body": pr.get("body", ""),
+                }
+            )
+            continue
+
         for issue_number in pr["resolved_issues"]:
             if issue_number == -1:
-                # 占位 issue
                 placeholder_issues.append(
                     {
                         "org": org,

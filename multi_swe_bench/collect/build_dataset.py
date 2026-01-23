@@ -247,8 +247,10 @@ def main(
                     pr["test_patch"] = test_patch
 
                     if fix_patch == "" or test_patch == "":
-                        print("empty fix or patch")
-                        break
+                        print(
+                            f"Skipping PR #{pr['number']}: empty fix_patch or test_patch"
+                        )
+                        continue
 
                     file.write(json.dumps(pr, ensure_ascii=False) + "\n")
                     break

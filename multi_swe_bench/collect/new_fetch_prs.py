@@ -1,16 +1,16 @@
 # Copyright (c) 2024 Bytedance Ltd. and/or its affiliates
 
-#  Licensed under the Apache License, Version 2.0 (the "License");
-#  you may not use this file except in compliance with the License.
-#  You may obtain a copy of the License at
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 
-#      http://www.apache.org/licenses/LICENSE-2.0
+#     http://www.apache.org/licenses/LICENSE-2.0
 
-#  Unless required by applicable law or agreed to in writing, software
-#  distributed under the License is distributed on an "AS IS" BASIS,
-#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-#  See the License for the specific language governing permissions and
-#  limitations under the License.
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 import argparse
 import json
@@ -21,7 +21,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-# from github import Auth, Github
 from tqdm import tqdm
 
 from multi_swe_bench.collect.util import get_tokens, make_request_with_retry
@@ -74,12 +73,76 @@ def get_parser() -> argparse.ArgumentParser:
         default=None,
         help="keywords to filter PRs, separated by commas.",
     )
+    parser.add_argument(
+        "--skip-commit-message",
+        type=bool,
+        default=False,
+        help="Skip fetching commit messages.",
+    )
     return parser
 
 
-# def get_github(token) -> Github:
-#     auth = Auth.Token(token)
-#     return Github(auth=auth, per_page=100)
+def extract_resolved_issues(pull: dict) -> list[int]:
+    """
+    判断 PR 是否解决/关联 issue。
+    - 如果 title/body/commit 包含 fix/close/resolve + #num → 返回 issue number
+    - 如果 title/body/labels 包含关键字（refactor/ref/...）但没有 #num → 返回 -1 作为占位
+    """
+
+    issue_keywords = {
+        "close",
+        "closes",
+        "closed",
+        "fix",
+        "fixes",
+        "fixed",
+        "resolve",
+        "resolves",
+        "resolved",
+    }
+
+    extra_refactor_keywords = {"refactor", "ref", "internal refactoring"}
+    all_keywords = issue_keywords.union(extra_refactor_keywords)
+
+    issues_pat = re.compile(r"(\w+)\s*\#(\d+)")
+
+    title = pull.get("title") or ""
+    body = pull.get("body") or ""
+    commits = pull.get("commits", [])
+    commits_msgs = [
+        commit.get("message") or "" for commit in commits if isinstance(commit, dict)
+    ]
+    text = title + "\n" + body
+    text += "\n" + "\n".join(commits_msgs)
+
+    text = re.sub(r"(?s)<!--.*?-->", "", text)
+
+    references = dict(issues_pat.findall(text))
+    resolved_issues = set()
+    for word, issue_num in references.items():
+        if word.lower() in issue_keywords:
+            resolved_issues.add(int(issue_num))
+
+    if not resolved_issues:
+        for kw in extra_refactor_keywords:
+            if kw.lower() in text.lower():
+                found_numbers = re.findall(r"#(\d+)", text)
+                if found_numbers:
+                    for num_str in found_numbers:
+                        resolved_issues.add(int(num_str))
+
+                if not resolved_issues:
+                    issue_url = pull.get("issue_url") or ""
+                    if issue_url:
+                        issue_num = issue_url.split("/")[-1]
+                        if issue_num.isdigit():
+                            resolved_issues.add(int(issue_num))
+
+                if not resolved_issues:
+                    resolved_issues.add(-1)
+                break
+
+    return list(resolved_issues)
 
 
 def is_relevant_pull(pull, key_words: Optional[str] = None) -> bool:
@@ -90,24 +153,14 @@ def is_relevant_pull(pull, key_words: Optional[str] = None) -> bool:
     title = pull.title.lower() if pull.title else ""
     labels = [label.name.lower() for label in pull.labels]
 
-    # rule 1: title: fix #123
-    if re.search(r"fix\s*#\d+", title, re.IGNORECASE):
-        return True
-
-    # 默认关键词
     default_keywords = {""}
 
-    # 用户指定 key_words（允许多个关键词用逗号分隔）
     if key_words is not None and key_words != "":
         user_keywords = {w.strip().lower() for w in key_words.split(",")}
         keywords = user_keywords
     else:
         keywords = default_keywords
 
-    # print(f"=== Using keywords for filtering: {keywords}")
-    # rule 2: labels contain keywords
-    # if any(k in label for label in labels for k in keywords):
-    #     return True
     if any(k in label for label in labels for k in keywords):
         return True
     if any(k in title for k in keywords):
@@ -126,6 +179,7 @@ def main(
     key_words: Optional[str] = None,
     merged_after: Optional[str] = None,
     merged_before: Optional[str] = None,
+    skip_commit_message: bool = False,
 ):
     print("starting get all pull requests")
     print(f"Input CSV: {input_csv}")
@@ -135,8 +189,8 @@ def main(
     print(f"Merged After: {merged_after}")
     print(f"Merged Before: {merged_before}")
     print(f"Key Words: {key_words}")
+    print(f"Skip Commit Message: {skip_commit_message}")
 
-    # Read repositories from CSV
     import csv
 
     repositories = []
@@ -150,21 +204,17 @@ def main(
 
     print(f"Found {len(repositories)} repositories to process")
 
-    # Convert created_at string -> timezone-aware datetime
     filter_dt = None
     if created_at:
         try:
-            # 支持 GitHub 风格：xxxx-xx-xxTxx:xx:xxZ
             created_at_clean = created_at.replace("Z", "+00:00")
             dt = datetime.fromisoformat(created_at_clean)
         except ValueError:
             raise ValueError(f"Invalid created_at format: {created_at}")
-        # 如果用户输入的是没有时区的日期，补成 UTC
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
         filter_dt = dt
 
-    # Convert merged_after string -> timezone-aware datetime
     merged_dt = None
     if merged_after:
         try:
@@ -176,7 +226,6 @@ def main(
             md = md.replace(tzinfo=timezone.utc)
         merged_dt = md
 
-    # Convert merged_before string -> timezone-aware datetime
     merged_before_dt = None
     if merged_before:
         try:
@@ -208,17 +257,14 @@ def main(
         for org, repo in repositories:
             print(f"Processing repository: {org}/{repo}")
 
-            # Use the Search API to fetch merged PRs with optional merged date filter
             headers = {"Accept": "application/vnd.github.v3+json"}
             if tk:
                 headers["Authorization"] = f"{tk}"
-            # print(f"headers:{headers}")
-            # query = f"repo:{org}/{repo} is:pr is:merged"
+
             base_query_parts = [f"repo:{org}/{repo}", "is:pr", "is:merged"]
 
             if merged_after:
                 base_query_parts.append(f" merged:>={merged_after}")
-                # query += f" merged:>={merged_after}"
             if merged_before:
                 base_query_parts.append(f" merged:<={merged_before}")
             if key_words is not None and key_words != "":
@@ -227,7 +273,7 @@ def main(
                     if kw_clean:
                         base_query_parts.append(f'"{kw_clean}"')
             query = " ".join(base_query_parts)
-            # You can also include created_at in the query if desired, but we'll keep created_at as a secondary filter
+
             base_url = f"https://api.github.com/search/issues?q={query}&sort=updated&order=desc&per_page=100"
 
             url = base_url
@@ -255,7 +301,6 @@ def main(
                 for item in items:
                     pr_number = item["number"]
                     try:
-                        # Fetch individual PR details using the REST API
                         pr_url = f"https://api.github.com/repos/{org}/{repo}/pulls/{pr_number}"
 
                         def make_pr_request():
@@ -272,12 +317,20 @@ def main(
                         pr_resp.raise_for_status()
                         pr_data = pr_resp.json()
 
-                        # pull = r.get_pull(pr_number)
+                        base_obj = pr_data.get("base", {})
+                        if "sha" not in base_obj:
+                            print(
+                                f"Warning: PR #{pr_number} base object missing sha: {list(base_obj.keys())}"
+                            )
+
+                        commits_list = pr_data.get("commits", [])
+                        if not commits_list and not skip_commit_message:
+                            print(f"Warning: PR #{pr_number} commits list is empty")
+
                     except Exception as e:
                         print(f"Failed to fetch PR #{pr_number} details: {e}")
                         continue
 
-                    # Apply filters
                     created_at_dt = datetime.fromisoformat(
                         pr_data["created_at"].replace("Z", "+00:00")
                     )
@@ -287,14 +340,12 @@ def main(
                             merged_at_dt.replace("Z", "+00:00")
                         )
 
-                    # created_at filter
                     if filter_dt is not None and created_at_dt <= filter_dt:
                         print(
                             f"Skipping PR #{pr_number} created at {created_at_dt}, required after {filter_dt}"
                         )
                         continue
 
-                    # merged_at filter
                     if merged_dt is not None and (
                         merged_at_dt is None or merged_at_dt <= merged_dt
                     ):
@@ -303,7 +354,6 @@ def main(
                         )
                         continue
 
-                    # merged_before filter
                     if (
                         merged_before_dt is not None
                         and merged_at_dt
@@ -314,9 +364,8 @@ def main(
                         )
                         continue
 
-                    # keyword filtering
                     if key_words is not None and key_words != "":
-                        # Create a mock pull object for filtering
+
                         class MockLabel:
                             def __init__(self, name):
                                 self.name = name
@@ -338,6 +387,28 @@ def main(
                     print(
                         f"Get PR #{pr_number} created at {created_at_dt} merged at {merged_at_dt}"
                     )
+
+                    commits_data = []
+                    if not skip_commit_message and commits_list:
+                        commits_data = [
+                            {
+                                "sha": commit.get("sha"),
+                                "parents": [
+                                    p.get("sha") for p in commit.get("parents", [])
+                                ],
+                                "message": commit.get("commit", {}).get("message", ""),
+                            }
+                            for commit in commits_list
+                        ]
+
+                    resolved_issues = extract_resolved_issues(
+                        {
+                            "title": pr_data.get("title", ""),
+                            "body": pr_data.get("body", ""),
+                            "commits": commits_data,
+                        }
+                    )
+
                     file.write(
                         json.dumps(
                             {
@@ -363,6 +434,8 @@ def main(
                                     label["name"] for label in pr_data.get("labels", [])
                                 ],
                                 "draft": pr_data.get("draft", False),
+                                "commits": commits_data,
+                                "resolved_issues": resolved_issues,
                                 "commits_url": pr_data["commits_url"],
                                 "review_comments_url": pr_data["review_comments_url"],
                                 "review_comment_url": pr_data["review_comment_url"],
@@ -376,7 +449,6 @@ def main(
                     fetched += 1
                     total_prs += 1
 
-                # Pagination
                 if "next" in resp.links:
                     url = resp.links["next"]["url"]
                 else:
@@ -401,4 +473,5 @@ if __name__ == "__main__":
         args.key_words,
         args.merged_after,
         args.merged_before,
+        args.skip_commit_message,
     )

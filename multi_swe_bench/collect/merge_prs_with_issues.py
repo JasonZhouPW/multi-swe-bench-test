@@ -58,23 +58,37 @@ def main(out_dir: Path, org: str, repo: str):
     ) as file:
         for pull in tqdm(filtered_prs, desc="Merging dataset"):
             resolved_issues = []
-            for issue_number in pull["resolved_issues"]:
-                if issue_number == -1:
-                    resolved_issues.append({
+
+            if "resolved_issues" not in pull or not pull["resolved_issues"]:
+                resolved_issues.append(
+                    {
                         "org": org,
                         "repo": repo,
                         "number": -1,
                         "state": "unknown",
                         "title": pull.get("title", ""),
                         "body": pull.get("body", ""),
-                    })
-                    continue    
-                if issue_number not in issues:
-                    continue
-                resolved_issues.append(issues[issue_number])
+                    }
+                )
+            else:
+                for issue_number in pull["resolved_issues"]:
+                    if issue_number == -1:
+                        resolved_issues.append(
+                            {
+                                "org": org,
+                                "repo": repo,
+                                "number": -1,
+                                "state": "unknown",
+                                "title": pull.get("title", ""),
+                                "body": pull.get("body", ""),
+                            }
+                        )
+                        continue
+                    if issue_number not in issues:
+                        continue
+                    resolved_issues.append(issues[issue_number])
 
             pull["resolved_issues"] = resolved_issues
-
             file.write(json.dumps(pull, ensure_ascii=False) + "\n")
 
 

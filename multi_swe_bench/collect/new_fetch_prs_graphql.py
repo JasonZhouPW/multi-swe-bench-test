@@ -1,16 +1,16 @@
 # Copyright (c) 2024 Bytedance Ltd. and/or its affiliates
 
-#  Licensed under the Apache License, Version 2.0 (the "License");
-#  you may not use this file except in compliance with the License.
-#  You may obtain a copy of the License at
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 
-#      http://www.apache.org/licenses/LICENSE-2.0
+#     http://www.apache.org/licenses/LICENSE-2.0
 
-#  Unless required by applicable law or agreed to in writing, software
-#  distributed under the License is distributed on an "AS IS" BASIS,
-#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-#  See the License for the specific language governing permissions and
-#  limitations under the License.
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 import argparse
 import json
@@ -70,9 +70,129 @@ def get_parser() -> argparse.ArgumentParser:
     return parser
 
 
-# def get_github(token) -> Github:
-#     auth = Auth.Token(token)
-#     return Github(auth=auth, per_page=100)
+def extract_resolved_issues(pull: dict) -> list[int]:
+    """
+    Extract resolved issues from PR data.
+    """
+    issue_keywords = {
+        "close",
+        "closes",
+        "closed",
+        "fix",
+        "fixes",
+        "fixed",
+        "resolve",
+        "resolves",
+        "resolved",
+    }
+
+    extra_refactor_keywords = {"refactor", "ref", "internal refactoring"}
+    all_keywords = issue_keywords.union(extra_refactor_keywords)
+
+    issues_pat = re.compile(r"(\w+)\s*\#(\d+)")
+
+    title = pull.get("title") or ""
+    body = pull.get("body") or ""
+    commits = pull.get("commits", [])
+    commits_msgs = [
+        commit.get("message") or "" for commit in commits if isinstance(commit, dict)
+    ]
+    text = title + "\n" + body
+    text += "\n" + "\n".join(commits_msgs)
+
+    text = re.sub(r"(?s)<!--.*?-->", "", text)
+
+    references = dict(issues_pat.findall(text))
+    resolved_issues = set()
+    for word, issue_num in references.items():
+        if word.lower() in issue_keywords:
+            resolved_issues.add(int(issue_num))
+
+    if not resolved_issues:
+        for kw in extra_refactor_keywords:
+            if kw.lower() in text.lower():
+                found_numbers = re.findall(r"#(\d+)", text)
+                if found_numbers:
+                    for num_str in found_numbers:
+                        resolved_issues.add(int(num_str))
+
+                if not resolved_issues:
+                    issue_url = pull.get("issue_url") or ""
+                    if issue_url:
+                        issue_num = issue_url.split("/")[-1]
+                        if issue_num.isdigit():
+                            resolved_issues.add(int(issue_num))
+
+                if not resolved_issues:
+                    resolved_issues.add(-1)
+                break
+
+    return list(resolved_issues)
+
+
+def fetch_commits_from_graphql(
+    client: GitHubGraphQLClient,
+    org: str,
+    repo: str,
+    pr_number: int,
+) -> List[Dict[str, Any]]:
+    """
+    Fetch commits for a PR using GraphQL API.
+    """
+    query = """
+    query($owner: String!, $name: String!, $number: Int!) {
+      repository(owner: $owner, name: $name) {
+        pullRequest(number: $number) {
+          commits(first: 100) {
+            nodes {
+              oid
+              message
+              parents(first: 10) {
+                nodes {
+                  oid
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    """
+
+    variables = {
+        "owner": org,
+        "name": repo,
+        "number": pr_number,
+    }
+
+    try:
+        result = client.execute_query(query, variables)
+        if "errors" in result:
+            print(f"GraphQL errors fetching commits: {result['errors']}")
+            return []
+
+        repo_data = result.get("repository", {})
+        pr_data = repo_data.get("pullRequest", {})
+        commits_data = pr_data.get("commits", {})
+        nodes = commits_data.get("nodes", [])
+
+        commits = []
+        for node in nodes:
+            parents_data = node.get("parents", {}).get("nodes", [])
+            parents = [p.get("oid") for p in parents_data]
+            commits.append(
+                {
+                    "sha": node.get("oid"),
+                    "message": node.get("message", ""),
+                    "parents": parents,
+                }
+            )
+
+        return commits
+
+    except Exception as e:
+        print(f"Error fetching commits for PR #{pr_number}: {e}")
+        return []
 
 
 def search_prs_with_graphql(
@@ -87,7 +207,6 @@ def search_prs_with_graphql(
     """
     Search for merged PRs in a repository using GitHub GraphQL API.
     """
-    # Build search query
     query_parts = [f"repo:{org}/{repo}", "is:pr", "is:merged"]
 
     if merged_after:
@@ -106,7 +225,6 @@ def search_prs_with_graphql(
         f"Debug: org={org}, repo={repo}, merged_after={merged_after}, merged_before={merged_before}"
     )
 
-    # GraphQL query for PR search with full details
     query = """
     query($query: String!, $first: Int!, $after: String) {
       search(query: $query, type: ISSUE, first: $first, after: $after) {
@@ -162,7 +280,7 @@ def search_prs_with_graphql(
 
         try:
             result = client.execute_query(query, variables)
-            print(f"GraphQL result: {result}")  # Debug output
+            print(f"GraphQL result: {result}")
             if "errors" in result:
                 print(f"GraphQL errors: {result['errors']}")
                 break
@@ -173,11 +291,9 @@ def search_prs_with_graphql(
             for edge in edges:
                 node = edge.get("node", {})
                 if node:
-                    # Extract all PR data from GraphQL response
                     merge_commit = node.get("mergeCommit", {}) or {}
                     base_ref = node.get("baseRef", {}) or {}
 
-                    # Construct REST API URLs from available data
                     pr_number = node.get("number")
                     repo_full_name = f"{org}/{repo}"
                     api_base = f"https://api.github.com/repos/{repo_full_name}"
@@ -191,12 +307,10 @@ def search_prs_with_graphql(
                         "body": node.get("body", ""),
                         "url": node.get("url"),
                         "id": node.get("id"),
-                        "html_url": node.get(
-                            "url"
-                        ),  # GraphQL url is the same as html_url
+                        "html_url": node.get("url"),
                         "diff_url": f"{node.get('url')}.diff",
                         "patch_url": f"{node.get('url')}.patch",
-                        "issue_url": node.get("url"),  # Same as url for PRs
+                        "issue_url": node.get("url"),
                         "created_at": node.get("createdAt"),
                         "updated_at": node.get("updatedAt"),
                         "closed_at": node.get("closedAt"),
@@ -238,35 +352,25 @@ def search_prs_with_graphql(
 
 def is_relevant_pull(pull, key_words: Optional[str] = None) -> bool:
     """
-    判断 PR 是否可能是修复 issue 的 PR。
+    Filter PRs by keywords.
     """
+    title = pull.get("title", "").lower()
+    labels = [label.get("name", "").lower() for label in pull.get("labels", [])]
+    body = pull.get("body", "").lower()
 
-    title = pull.title.lower() if pull.title else ""
-    labels = [label.name.lower() for label in pull.labels]
-
-    # rule 1: title: fix #123
-    # if re.search(r"fix\s*#\d+", title, re.IGNORECASE):
-    #     return True
-
-    # 默认关键词
     default_keywords = {""}
 
-    # 用户指定 key_words（允许多个关键词用逗号分隔）
     if key_words is not None and key_words != "":
         user_keywords = {w.strip().lower() for w in key_words.split(",")}
         keywords = user_keywords
     else:
         keywords = default_keywords
 
-    # print(f"=== Using keywords for filtering: {keywords}")
-    # rule 2: labels contain keywords
-    # if any(k in label for label in labels for k in keywords):
-    #     return True
     if any(k in label for label in labels for k in keywords):
         return True
     if any(k in title for k in keywords):
         return True
-    if pull.body and any(k in pull.body.lower() for k in keywords):
+    if any(k in body for k in keywords):
         return True
 
     return False
@@ -280,14 +384,13 @@ def main(
     merged_after: Optional[str] = None,
     merged_before: Optional[str] = None,
 ):
-    print("starting get all pull requests")
+    print("starting get all pull requests using GraphQL")
     print(f"Input CSV: {input_csv}")
     print(f"Tokens: {tokens}")
     print(f"Merged After: {merged_after}")
     print(f"Merged Before: {merged_before}")
     print(f"Key Words: {key_words}")
 
-    # Read repositories from CSV
     import csv
 
     repositories = []
@@ -301,7 +404,6 @@ def main(
 
     print(f"Found {len(repositories)} repositories to process")
 
-    print("token:", tokens)
     if tokens:
         tk = random.choice(tokens)
         print("Using token:", tk)
@@ -310,16 +412,10 @@ def main(
         print("No tokens available. Cannot use GraphQL API.")
         return
 
-    def datetime_serializer(obj):
-        if isinstance(obj, datetime):
-            return obj.isoformat()
-        return obj
-
     total_prs = 0
     for org, repo in repositories:
         print(f"Processing repository: {org}/{repo}")
 
-        # Use GraphQL to search for PRs
         prs = search_prs_with_graphql(
             client,
             org,
@@ -334,7 +430,6 @@ def main(
             print(f"No PRs found for {org}/{repo}")
             continue
 
-        # Create output filename for this org/repo
         output_filename = output_dir / f"{org}__{repo}_filtered_prs.jsonl"
 
         fetched = 0
@@ -342,30 +437,25 @@ def main(
             for pr_data in prs:
                 pr_number = pr_data["number"]
 
-                # Additional keyword filtering if needed (GraphQL already filters, but double-check)
                 if key_words is not None and key_words != "":
-                    # Create a mock pull object for filtering
-                    class MockLabel:
-                        def __init__(self, name):
-                            self.name = name
-
-                    class MockPull:
-                        def __init__(self, data):
-                            self.title = data.get("title", "")
-                            self.body = data.get("body", "")
-                            self.labels = [
-                                MockLabel(label.get("name", ""))
-                                for label in data.get("labels", [])
-                            ]
-
-                    mock_pull = MockPull(pr_data)
-                    if not is_relevant_pull(mock_pull, key_words):
+                    if not is_relevant_pull(pr_data, key_words):
                         print(f"Skipping PR #{pr_number} not matching keywords")
                         continue
 
-                print(f"✅ Processing PR #{pr_number} merged at {pr_data['merged_at']}")
+                print(f"Processing PR #{pr_number}")
 
-                # Write PR data directly from GraphQL results (no REST API call needed)
+                commits_data = fetch_commits_from_graphql(client, org, repo, pr_number)
+                resolved_issues = extract_resolved_issues(
+                    {
+                        "title": pr_data.get("title", ""),
+                        "body": pr_data.get("body", ""),
+                        "commits": commits_data,
+                    }
+                )
+
+                pr_data["commits"] = commits_data
+                pr_data["resolved_issues"] = resolved_issues
+
                 file.write(
                     json.dumps(
                         pr_data,
