@@ -10,7 +10,7 @@ MIN_STARS=100
 MAX_RESULTS=500
 MERGED_AFTER="2024-01-01"
 MERGED_BEFORE="2025-12-31"
-TOKEN="./data_pipeline/tokens.txt"
+TOKEN="./data_pip//eline/tokens.txt"
 OUTPUT_DIR=""
 
 usage() {

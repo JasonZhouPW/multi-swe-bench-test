@@ -110,7 +110,6 @@ if [ -z "$QUERY" ]; then
 fi
 
 REPOS_CSV="$OUTPUT_DIR/repos.csv"
-PRS_JSONL="$OUTPUT_DIR/prs.jsonl"
 
 echo ""
 echo "Step 1: Fetching GitHub repos with query: $QUERY"
@@ -144,22 +143,39 @@ if [ -n "$MERGED_BEFORE" ]; then
     MERGED_ARGS="$MERGED_ARGS --merged-before $MERGED_BEFORE"
 fi
 
+KEY_WORDS_ARGS=""
+if [ -n "$KEYWORDS" ]; then
+    KEY_WORDS_ARGS="--key_words $KEYWORDS"
+fi
+
 $PYTHON_CMD ../multi_swe_bench/collect/new_fetch_prs_graphql.py \
     --input "$REPOS_CSV" \
-    --output "$PRS_JSONL" \
+    --output-dir "$OUTPUT_DIR" \
     $MERGED_ARGS \
-    $TOKEN_ARGS
+    $TOKEN_ARGS \
+    $KEY_WORDS_ARGS
 
-if [ ! -f "$PRS_JSONL" ] || [ ! -s "$PRS_JSONL" ]; then
-    echo "❌ Error: Failed to generate PRs JSONL file or file is empty." >&2
+# Check if any filtered PRs files were created
+PR_FILES=$(ls "$OUTPUT_DIR"/*_filtered_prs.jsonl 2>/dev/null | wc -l)
+if [ "$PR_FILES" -eq 0 ]; then
+    echo "❌ Error: No filtered PRs files were generated." >&2
     exit 1
 fi
 
-echo "✅ Generated PRs JSONL: $PRS_JSONL"
-PR_COUNT=$(wc -l < "$PRS_JSONL")
-echo "   Found $PR_COUNT PRs"
+TOTAL_PR_COUNT=0
+echo "✅ Generated filtered PRs files:"
+for pr_file in "$OUTPUT_DIR"/*_filtered_prs.jsonl; do
+    if [ -f "$pr_file" ]; then
+        pr_count=$(wc -l < "$pr_file")
+        TOTAL_PR_COUNT=$((TOTAL_PR_COUNT + pr_count))
+        filename=$(basename "$pr_file")
+        echo "   - $filename: $pr_count PRs"
+    fi
+done
+
+echo "   Total PRs across all repositories: $TOTAL_PR_COUNT"
 
 echo ""
 echo "🎉 All done! Output files:"
-echo "   - Repos: $REPOS_CSV"
-echo "   - PRs:   $PRS_JSONL"
+echo "   - Repos: $REPOS_CSV ($REPO_COUNT repositories)"
+echo "   - PR files: $PR_FILES filtered PRs files created ($TOTAL_PR_COUNT total PRs)"

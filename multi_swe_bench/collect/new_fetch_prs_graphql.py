@@ -33,7 +33,10 @@ def get_parser() -> argparse.ArgumentParser:
         "--input", type=Path, required=True, help="Input CSV file with repositories."
     )
     parser.add_argument(
-        "--output", type=Path, required=True, help="Output JSONL file for PRs."
+        "--output-dir",
+        type=Path,
+        default=Path("."),
+        help="Output directory for filtered PRs files.",
     )
     parser.add_argument(
         "--tokens",
@@ -180,6 +183,8 @@ def search_prs_with_graphql(
                     api_base = f"https://api.github.com/repos/{repo_full_name}"
 
                     pr_data = {
+                        "org": org,
+                        "repo": repo,
                         "number": pr_number,
                         "state": node.get("state"),
                         "title": node.get("title", ""),
@@ -270,14 +275,13 @@ def is_relevant_pull(pull, key_words: Optional[str] = None) -> bool:
 def main(
     tokens: list[str],
     input_csv: Path,
-    output_jsonl: Path,
+    output_dir: Path = Path("."),
     key_words: Optional[str] = None,
     merged_after: Optional[str] = None,
     merged_before: Optional[str] = None,
 ):
     print("starting get all pull requests")
     print(f"Input CSV: {input_csv}")
-    print(f"Output JSONL: {output_jsonl}")
     print(f"Tokens: {tokens}")
     print(f"Merged After: {merged_after}")
     print(f"Merged Before: {merged_before}")
@@ -312,22 +316,29 @@ def main(
         return obj
 
     total_prs = 0
-    with open(output_jsonl, "w", encoding="utf-8") as file:
-        for org, repo in repositories:
-            print(f"Processing repository: {org}/{repo}")
+    for org, repo in repositories:
+        print(f"Processing repository: {org}/{repo}")
 
-            # Use GraphQL to search for PRs
-            prs = search_prs_with_graphql(
-                client,
-                org,
-                repo,
-                merged_after,
-                merged_before,
-                key_words,
-                max_results=1000,
-            )
+        # Use GraphQL to search for PRs
+        prs = search_prs_with_graphql(
+            client,
+            org,
+            repo,
+            merged_after,
+            merged_before,
+            key_words,
+            max_results=1000,
+        )
 
-            fetched = 0
+        if not prs:
+            print(f"No PRs found for {org}/{repo}")
+            continue
+
+        # Create output filename for this org/repo
+        output_filename = output_dir / f"{org}__{repo}_filtered_prs.jsonl"
+
+        fetched = 0
+        with open(output_filename, "w", encoding="utf-8") as file:
             for pr_data in prs:
                 pr_number = pr_data["number"]
 
@@ -365,9 +376,9 @@ def main(
                 fetched += 1
                 total_prs += 1
 
-            print(f"Fetched {fetched} merged PRs from {org}/{repo}")
+        print(f"Fetched {fetched} merged PRs from {org}/{repo} -> {output_filename}")
 
-    print(f"Total PRs fetched: {total_prs}")
+    print(f"Total PRs fetched across all repositories: {total_prs}")
 
 
 if __name__ == "__main__":
@@ -379,7 +390,7 @@ if __name__ == "__main__":
     main(
         tokens,
         args.input,
-        args.output,
+        args.output_dir,
         args.key_words,
         args.merged_after,
         args.merged_before,
