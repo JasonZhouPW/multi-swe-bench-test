@@ -13,16 +13,28 @@
 # limitations under the License.
 
 import argparse
+import csv
 import json
 import random
 import re
 import requests
+from datetime import datetime, timezone
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
 from multi_swe_bench.collect.util import get_tokens, make_request_with_retry
 from multi_swe_bench.collect.fetch_github_repo_gql import GitHubGraphQLClient
+
+def extract_related_issues(pr_title: str, pr_body: str) -> Optional[List[int]]:
+    issue_pattern = re.compile(r"#(\d+)")
+    issue_refs = set()
+
+    for text in [pr_body, pr_title]:
+        for match in issue_pattern.finditer(text):
+            issue_refs.add(int(match.group(1)))
+
+    return list(issue_refs) if issue_refs else None
 
 
 def get_parser() -> argparse.ArgumentParser:
@@ -230,33 +242,39 @@ def search_prs_with_graphql(
       search(query: $query, type: ISSUE, first: $first, after: $after) {
         edges {
           node {
-            ... on PullRequest {
-              number
-              title
-              body
-              createdAt
-              updatedAt
-              closedAt
-              mergedAt
-              mergeCommit {
-                oid
-              }
-              url
-              id
-              state
-              isDraft
-              labels(first: 10) {
-                nodes {
-                  name
+                ... on PullRequest {
+                  number
+                  title
+                  body
+                  createdAt
+                  updatedAt
+                  closedAt
+                  mergedAt
+                  mergeCommit {
+                    oid
+                    message
+                  }
+                  url
+                  id
+                  state
+                  isDraft
+                  labels(first: 10) {
+                    nodes {
+                      name
+                    }
+                  }
+                  baseRef {
+                    name
+                    target {
+                      ... on Commit {
+                        oid
+                      }
+                    }
+                  }
+                  headRef {
+                    name
+                  }
                 }
-              }
-              baseRef {
-                name
-              }
-              headRef {
-                name
-              }
-            }
           }
         }
         pageInfo {
@@ -293,10 +311,24 @@ def search_prs_with_graphql(
                 if node:
                     merge_commit = node.get("mergeCommit", {}) or {}
                     base_ref = node.get("baseRef", {}) or {}
+                    head_ref = node.get("headRef", {}) or {}
 
                     pr_number = node.get("number")
                     repo_full_name = f"{org}/{repo}"
                     api_base = f"https://api.github.com/repos/{repo_full_name}"
+
+                    # Extract related issue numbers from PR content
+                    pr_body = node.get("body", "")
+                    pr_title = node.get("title", "")
+
+                    issue_pattern = re.compile(r"#(\d+)")
+                    issue_refs = set()
+
+                    for text in [pr_body, pr_title]:
+                        for match in issue_pattern.finditer(text):
+                            issue_refs.add(int(match.group(1)))
+
+                    issue_refs = list(issue_refs) if issue_refs else None
 
                     pr_data = {
                         "org": org,
@@ -316,6 +348,17 @@ def search_prs_with_graphql(
                         "closed_at": node.get("closedAt"),
                         "merged_at": node.get("mergedAt"),
                         "merge_commit_sha": merge_commit.get("oid"),
+                        "commits":[
+                            {
+                                "oid":merge_commit.get("oid",""),
+                                "message":merge_commit.get("message","")
+                            }
+                        ],
+                        "base_commit_hash": base_ref.get("target", {}).get("oid")
+                        if base_ref.get("target")
+                        else None,
+                        "head_ref_name": head_ref.get("name") if head_ref else None,
+                        "related_issues": issue_refs,
                         "labels": [
                             {"name": label.get("name", "")}
                             for label in node.get("labels", {}).get("nodes", [])
@@ -333,7 +376,7 @@ def search_prs_with_graphql(
                         else None,
                     }
                     print(
-                        f"Found PR: {pr_data['number']}, state: {pr_data['state']}, merged_at: {pr_data['merged_at']}"
+                        f"Found PR: {pr_data['number']}, state: {pr_data['state']}, merged_at: {pr_data['merged_at']}, issues: {issue_refs}"
                     )
                     prs.append(pr_data)
 
@@ -444,17 +487,19 @@ def main(
 
                 print(f"Processing PR #{pr_number}")
 
-                commits_data = fetch_commits_from_graphql(client, org, repo, pr_number)
-                resolved_issues = extract_resolved_issues(
-                    {
-                        "title": pr_data.get("title", ""),
-                        "body": pr_data.get("body", ""),
-                        "commits": commits_data,
-                    }
-                )
+                # commits_data = fetch_commits_from_graphql(client, org, repo, pr_number)
+                # resolved_issues = extract_resolved_issues(
+                #     {
+                #         "title": pr_data.get("title", ""),
+                #         "body": pr_data.get("body", ""),
+                #         # "commits": commits_data,
+                #     }
+                # )
+                related_issues = extract_related_issues(pr_data["title"], pr_data["body"])
 
-                pr_data["commits"] = commits_data
-                pr_data["resolved_issues"] = resolved_issues
+
+                # pr_data["commits"] = commits_data
+                pr_data["resolved_issues"] = related_issues
 
                 file.write(
                     json.dumps(
