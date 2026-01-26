@@ -7,7 +7,6 @@ MAX_RESULTS=20
 TOKEN="./tokens.txt"
 OUTPUT_DIR=""
 MERGED_AFTER=""
-MERGED_BEFORE=""
 KEYWORDS=""
 QUERY=""
 
@@ -23,7 +22,6 @@ usage() {
     echo "  -t TOKEN          GitHub token or token file (default: $TOKEN)"
     echo "  -o OUTPUT_DIR     Output directory for results (required)"
     echo "  -m MERGED_AFTER   Fetch PRs merged after this date (ISO format, e.g., 2025-01-01)"
-    echo "  -M MERGED_BEFORE  Fetch PRs merged before this date (ISO format, e.g., 2025-12-31)"
     echo "  -k KEYWORDS       Keywords to append to search query"
     echo "  -q QUERY          Custom search query (overrides -l, -s, -k)"
     echo "  -h                Show this help message"
@@ -34,7 +32,7 @@ usage() {
     exit 1
 }
 
-while getopts ":l:s:n:t:o:m:M:k:q:h" opt; do
+while getopts ":l:s:n:t:o:m:k:q:h" opt; do
   case $opt in
     l) LANGUAGE="$OPTARG" ;;
     s) MIN_STARS="$OPTARG" ;;
@@ -42,7 +40,6 @@ while getopts ":l:s:n:t:o:m:M:k:q:h" opt; do
     t) TOKEN="$OPTARG" ;;
     o) OUTPUT_DIR="$OPTARG" ;;
     m) MERGED_AFTER="$OPTARG" ;;
-    M) MERGED_BEFORE="$OPTARG" ;;
     k) KEYWORDS="$OPTARG" ;;
     q) QUERY="$OPTARG" ;;
     h) usage ;;
@@ -65,7 +62,6 @@ echo "  MIN_STARS    = $MIN_STARS"
 echo "  MAX_RESULTS  = $MAX_RESULTS"
 echo "  OUTPUT_DIR   = $OUTPUT_DIR"
 echo "  MERGED_AFTER = ${MERGED_AFTER:-<not set>}"
-echo "  MERGED_BEFORE= ${MERGED_BEFORE:-<not set>}"
 echo "  KEYWORDS     = ${KEYWORDS:-<not set>}"
 echo "  TOKEN        = $TOKEN"
 
@@ -138,9 +134,6 @@ fi
 MERGED_ARGS=""
 if [ -n "$MERGED_AFTER" ]; then
     MERGED_ARGS="$MERGED_ARGS --merged-after $MERGED_AFTER"
-fi
-if [ -n "$MERGED_BEFORE" ]; then
-    MERGED_ARGS="$MERGED_ARGS --merged-before $MERGED_BEFORE"
 fi
 
 KEY_WORDS_ARGS=""
