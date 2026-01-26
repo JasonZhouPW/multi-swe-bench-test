@@ -21,10 +21,21 @@
 1) **Step1 — 生成 Raw Dataset（必须最先执行）**
 - 目的：从 GitHub 拉取 PR 并整合为 `*_raw_dataset.jsonl`
 - 主要脚本：
-  - 生成 PR 数据：`./gen_raw_dataset.sh <owner/repo>`
-  - 补全并分类 raw dataset：`./collect_raw_dataset.sh`
+  - 生成 PR 数据：
+    - 传统脚本：`./gen_raw_dataset.sh <owner/repo>`
+    - GraphQL 脚本 (更稳定/高效)：`./new_gen_raw_dataset_graphql.sh -l <lang> -s <min_stars>`
+    - 批量生成：`./data_pipeline/gen_all_raw_datasets_new.sh`
+  - 补全并分类：`./collect_raw_dataset.sh`
 - 输出：`data/raw_datasets/<owner__repo>_raw_dataset.jsonl`
 - 校验：确认 `data/raw_datasets` 下存在 `*_raw_dataset.jsonl`
+
+1.1) **Step1.1 — 数据过滤与精炼（可选）**
+- 目的：筛选特定类别（如 Bug Fix, Performance）或限制 patch 大小
+- 脚本：`./filter_raw_dataset.sh -i <input_dir> -o <output_dir> [options]`
+- 特色：
+    - 支持交互式菜单（不带参数运行）。
+    - 预设模式：New Feature, Bug Fix, Edge Case, Performance。
+    - Patch 过滤：使用 `-p <bytes>` 指定最小补丁大小（仅计算代码部分）。
 
 
 2) **Step2 — 生成 Repo Docker 与脚本并构建 dataset（可与 Step3 并行）**
@@ -60,6 +71,11 @@
 - 输出：`data/output/`（中间）与 `data/final_output/`（最终报告）
 - 校验：查看 `final_report.json` 与 `data/final_output/` 中的报告与日志
 
+6) **Step 6 — 训练数据提取（用于模型微调）**
+- 目的：将处理好的数据集转换为 LLM 训练格式（JSON）
+- 脚本：`./extract_training_data.sh <input_path> <output_file>`
+- 功能：支持处理单个文件或整个目录，自动合并并进行双向转换（PR->Patch, Patch->PR）。
+
 ---
 
 ## 并行策略与快速运行建议 ⚡
@@ -94,10 +110,11 @@ wait
 
 - Step1:
   - `./gen_raw_dataset.sh owner/repo`
-  - 批量生成 (所有语言): `./data_pipeline/gen_all_raw_datasets.sh`
+  - `./new_gen_raw_dataset_graphql.sh -l Python -s 10000`
+  - 批量生成 (GraphQL): `./data_pipeline/gen_all_raw_datasets_new.sh`
   - `./collect_raw_dataset.sh`
-  - extract patches: `./extract_patches.sh training_data`
-  - combine jsonl: `./combine_jsonl.sh go_ds combined.jsonl`
+  - 数据过滤: `./filter_raw_dataset.sh -i ./raw_ds -o ./filtered -p 1024`
+  - 生成训练数据: `./extract_training_data.sh data/datasets output.json`
 - Step2:
   - `./unify_repo_scripts.sh data/raw_datasets/*_raw_dataset.jsonl`
   - 或单文件：`./data_pipeline/build_dataset.sh <raw_dataset.jsonl>`
