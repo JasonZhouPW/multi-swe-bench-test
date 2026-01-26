@@ -24,6 +24,7 @@ from typing import Optional
 import requests
 from tqdm import tqdm
 from unidiff import PatchSet
+from unidiff.errors import UnidiffParseError
 
 from multi_swe_bench.collect.util import (
     get_tokens,
@@ -94,13 +95,17 @@ def extract_patches(pull: dict, token: str) -> tuple[str, str]:
             "GitHub API rate limit exceeded. Please wait before making additional requests, or check your network connection."
         )
 
-    for hunk in PatchSet(patch):
-        if any(
-            test_word in hunk.path for test_word in ["test", "tests", "e2e", "testing"]
-        ):
-            test_patch += str(hunk)
-        else:
-            fix_patch += str(hunk)
+    try:
+        for hunk in PatchSet(patch):
+            if any(
+                test_word in hunk.path for test_word in ["test", "tests", "e2e", "testing"]
+            ):
+                test_patch += str(hunk)
+            else:
+                fix_patch += str(hunk)
+    except UnidiffParseError as e:
+        print(f"Error parsing patch for PR #{pull.get('number')}: {e}")
+        return "", ""
     return fix_patch, test_patch
 
 
@@ -146,14 +151,18 @@ def extract_patches_from_compare(pull: dict, token: str) -> tuple[str, str]:
 
     patch = response.text
 
-    for hunk in PatchSet(patch):
-        if any(
-            test_word in hunk.path.lower()
-            for test_word in ["test", "tests", "e2e", "testing"]
-        ):
-            test_patch += str(hunk)
-        else:
-            fix_patch += str(hunk)
+    try:
+        for hunk in PatchSet(patch):
+            if any(
+                test_word in hunk.path.lower()
+                for test_word in ["test", "tests", "e2e", "testing"]
+            ):
+                test_patch += str(hunk)
+            else:
+                fix_patch += str(hunk)
+    except UnidiffParseError as e:
+        print(f"Error parsing compare patch for PR #{pull.get('number')}: {e}")
+        return "", ""
     return fix_patch, test_patch
 
 
