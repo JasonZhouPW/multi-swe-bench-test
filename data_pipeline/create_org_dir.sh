@@ -1,5 +1,9 @@
-#!/usr/bin/env bash
 set -euo pipefail
+
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Define the project root
+PROJ_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 if [ $# -ne 1 ]; then
     echo "Usage: $0 <raw_dataset.jsonl>"
@@ -108,7 +112,7 @@ while IFS= read -r line || [ -n "$line" ]; do
     ORG=$(sanitize_name "$ORG_RAW")
     REPO=$(sanitize_name "$REPO_RAW")
 
-    BASE_DIR="multi_swe_bench/harness/repos/${LANG}"
+    BASE_DIR="$PROJ_ROOT/multi_swe_bench/harness/repos/${LANG}"
     ORG_DIR="${BASE_DIR}/${ORG}"
     REPO_DIR="${ORG_DIR}/${REPO}"
     INIT_FILE="${ORG_DIR}/__init__.py"

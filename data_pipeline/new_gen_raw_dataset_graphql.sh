@@ -109,11 +109,12 @@ REPOS_CSV="$OUTPUT_DIR/repos.csv"
 
 echo ""
 echo "Step 1: Fetching GitHub repos with query: $QUERY"
-$PYTHON_CMD ../multi_swe_bench/collect/fetch_github_repo_gql.py search \
-    --query "$QUERY" \
-    --max "$MAX_RESULTS" \
-    --output "$REPOS_CSV" \
-    --tokens "$TOKEN"
+$PYTHON_CMD "$PROJ_ROOT/multi_swe_bench/collect/fetch_github_repo_gql.py" search \
+    --language "$LANGUAGE" \
+    --min_stars "$MIN_STARS" \
+    --limit "$MAX_RESULTS" \
+    --merged_after "$MERGED_AFTER" \
+    --output_dir "$OUTPUT_DIR/repos"
 
 if [ ! -f "$REPOS_CSV" ] || [ ! -s "$REPOS_CSV" ]; then
     echo "❌ Error: Failed to generate repos CSV file or file is empty." >&2

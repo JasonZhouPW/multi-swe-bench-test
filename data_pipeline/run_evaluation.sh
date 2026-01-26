@@ -1,5 +1,12 @@
-#!/usr/bin/env bash
 set -euo pipefail
+
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Define the project root
+PROJ_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Ensure multi_swe_bench is in PYTHONPATH
+export PYTHONPATH="$PROJ_ROOT${PYTHONPATH:+:$PYTHONPATH}"
 
 ##########################################
 # 参数校验
@@ -11,7 +18,7 @@ if [ $# -ne 1 ]; then
 fi
 
 DATASET_FILE="$1"
-DATASET_PATH="./data/datasets/$DATASET_FILE"
+DATASET_PATH="$PROJ_ROOT/data/datasets/$DATASET_FILE"
 
 if [ ! -f "$DATASET_PATH" ]; then
     echo "❌ Error: dataset file not found: $DATASET_PATH"
@@ -23,7 +30,7 @@ fi
 ##########################################
 BASE_NAME="${DATASET_FILE%%_dataset.jsonl}"
 PATCH_FILE="${BASE_NAME}_patch.jsonl"
-PATCH_PATH="./data/patches/$PATCH_FILE"
+PATCH_PATH="$PROJ_ROOT/data/patches/$PATCH_FILE"
 
 if [ ! -f "$PATCH_PATH" ]; then
     echo "❌ Error: patch file not found: $PATCH_PATH"
@@ -43,7 +50,7 @@ echo "📄 Generating evaluation config: $EV_CONFIG"
 cat > "$EV_CONFIG" << EOF
 {
     "mode": "evaluation",
-    "workdir": "./data/workdir",
+    "workdir": "$PROJ_ROOT/data/workdir",
     "patch_files": [
         "$PATCH_PATH"
     ],
@@ -51,10 +58,10 @@ cat > "$EV_CONFIG" << EOF
         "$DATASET_PATH"
     ],
     "force_build": true,
-    "output_dir": "./data/final_output",
+    "output_dir": "$PROJ_ROOT/data/final_output",
     "specifics": [],
     "skips": [],
-    "repo_dir": "./data/repos",
+    "repo_dir": "$PROJ_ROOT/data/repos",
     "need_clone": false,
     "global_env": [],
     "clear_env": true,
@@ -62,7 +69,7 @@ cat > "$EV_CONFIG" << EOF
     "max_workers": 8,
     "max_workers_build_image": 8,
     "max_workers_run_instance": 8,
-    "log_dir": "./data/logs",
+    "log_dir": "$PROJ_ROOT/data/logs",
     "log_level": "DEBUG"
 }
 EOF
@@ -85,7 +92,7 @@ PROJECT_NAME="${PROJECT_NAME%_raw_dataset}"
 
 OUTPUT_FILENAME="${PROJECT_NAME}_final_report.json"
 # 输出目录
-REPORT_DIR="./data/final_output/${PROJECT_NAME}"
+REPORT_DIR="$PROJ_ROOT/data/final_output/${PROJECT_NAME}"
 mkdir -p "$REPORT_DIR"
 
 ##########################################

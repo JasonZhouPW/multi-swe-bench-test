@@ -1,5 +1,9 @@
-#!/usr/bin/env bash
 set -euo pipefail
+
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Define the project root
+PROJ_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 RAW_JSON="$1"
 EXTRA_JSON="${2:-}"   # optional parameter
@@ -86,7 +90,7 @@ CLASS_NAME=$(echo "$REPO_PY" | sed -E 's/(^|_)([a-z])/\U\2/g')
 ###################################################
 # Create folder
 ###################################################
-BASE_DIR="./multi_swe_bench/harness/repos/$LANG_DIR/$ORG_PY"
+BASE_DIR="$PROJ_ROOT/multi_swe_bench/harness/repos/$LANG_DIR/$ORG_PY"
 mkdir -p "$BASE_DIR"
 # replace REPO_PY "." to "_" for filename safety
 REPO_PY=$(echo "$REPO_PY" | tr '.' '_')

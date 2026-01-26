@@ -1,5 +1,12 @@
-#!/usr/bin/env bash
 set -euo pipefail
+
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Define the project root
+PROJ_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Ensure multi_swe_bench is in PYTHONPATH
+export PYTHONPATH="$PROJ_ROOT${PYTHONPATH:+:$PYTHONPATH}"
 
 ##########################################
 # 参数输入检查
@@ -36,11 +43,11 @@ RAW_DIR="$(dirname "$RAW_PATH")"
 ##########################################
 BASE_NAME="${RAW_FILE%%_raw_dataset.jsonl}"
 
-WORKDIR="./data/workdir"
-OUTPUT_DIR="./data/datasets"
-LOG_DIR="./data/logs"
-REPO_DIR="./data/repos"
-TEMP_DIR="./data/temp_dataset"
+WORKDIR="$PROJ_ROOT/data/workdir"
+OUTPUT_DIR="$PROJ_ROOT/data/datasets"
+LOG_DIR="$PROJ_ROOT/data/logs"
+REPO_DIR="$PROJ_ROOT/data/repos"
+TEMP_DIR="$PROJ_ROOT/data/temp_dataset"
 
 mkdir -p "$WORKDIR" "$OUTPUT_DIR" "$LOG_DIR" "$REPO_DIR" "$TEMP_DIR"
 

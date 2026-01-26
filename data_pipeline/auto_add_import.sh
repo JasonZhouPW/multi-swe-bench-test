@@ -1,5 +1,9 @@
-#!/usr/bin/env bash
 set -euo pipefail
+
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Define the project root
+PROJ_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 RAW_JSON="$1"
 
@@ -74,7 +78,7 @@ esac
 ##########################################
 # 创建目录结构 multi_swe_bench/harness/repos/<lang>/<org>
 ##########################################
-BASE_DIR="./multi_swe_bench/harness/repos/$LANG_DIR"
+BASE_DIR="$PROJ_ROOT/multi_swe_bench/harness/repos/$LANG_DIR"
 ORG_DIR="$BASE_DIR/$ORG_PY"
 
 mkdir -p "$ORG_DIR"

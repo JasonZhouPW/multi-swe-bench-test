@@ -1,5 +1,9 @@
-#!/usr/bin/env bash
 set -euo pipefail
+
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Define the project root
+PROJ_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 RAW_JSON="$1"
 EXTRA_JSON="${2:-}"   # optional parameter
@@ -82,7 +86,7 @@ CLASS_NAME=$(echo "$REPO_PY" | sed -E 's/(^|_)([a-z])/\U\2/g')
 ###################################################
 # Create folder
 ###################################################
-BASE_DIR="./multi_swe_bench/harness/repos/$LANG_DIR/$ORG_PY"
+BASE_DIR="$PROJ_ROOT/multi_swe_bench/harness/repos/$LANG_DIR/$ORG_PY"
 mkdir -p "$BASE_DIR"
 
 TARGET_FILE="$BASE_DIR/${REPO_PY}.py"
@@ -338,7 +342,7 @@ EOF
 echo "✅ Generated: $INIT_FILE"
 
 # Add import to golang/__init__.py
-GOLANG_INIT="./multi_swe_bench/harness/repos/$LANG_DIR/__init__.py"
+GOLANG_INIT="$PROJ_ROOT/multi_swe_bench/harness/repos/$LANG_DIR/__init__.py"
 if [ -f "$GOLANG_INIT" ]; then
     echo "from multi_swe_bench.harness.repos.$LANG_DIR.$ORG_PY.$REPO_PY import *" >> "$GOLANG_INIT"
     echo "✅ Added import to $GOLANG_INIT"
