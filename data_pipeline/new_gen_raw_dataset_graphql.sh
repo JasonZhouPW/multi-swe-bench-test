@@ -1,5 +1,10 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -e
+
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Define the project root
+PROJ_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 LANGUAGE="Rust"
 MIN_STARS=10000
@@ -110,11 +115,10 @@ REPOS_CSV="$OUTPUT_DIR/repos.csv"
 echo ""
 echo "Step 1: Fetching GitHub repos with query: $QUERY"
 $PYTHON_CMD "$PROJ_ROOT/multi_swe_bench/collect/fetch_github_repo_gql.py" search \
-    --language "$LANGUAGE" \
-    --min_stars "$MIN_STARS" \
-    --limit "$MAX_RESULTS" \
-    --merged_after "$MERGED_AFTER" \
-    --output_dir "$OUTPUT_DIR/repos"
+    --query "$QUERY" \
+    --max "$MAX_RESULTS" \
+    --output "$REPOS_CSV" \
+    --tokens "$TOKEN"
 
 if [ ! -f "$REPOS_CSV" ] || [ ! -s "$REPOS_CSV" ]; then
     echo "❌ Error: Failed to generate repos CSV file or file is empty." >&2
@@ -142,7 +146,7 @@ if [ -n "$KEYWORDS" ]; then
     KEY_WORDS_ARGS="--key_words $KEYWORDS"
 fi
 
-$PYTHON_CMD ../multi_swe_bench/collect/new_fetch_prs_graphql.py \
+$PYTHON_CMD "$PROJ_ROOT/multi_swe_bench/collect/new_fetch_prs_graphql.py" \
     --input "$REPOS_CSV" \
     --output-dir "$OUTPUT_DIR" \
     $MERGED_ARGS \
@@ -175,7 +179,7 @@ PIPELINE_TOKEN_ARGS=""
 if [ -n "$TOKEN" ]; then
     PIPELINE_TOKEN_ARGS="--tokens $TOKEN"
 fi
-$PYTHON_CMD ../multi_swe_bench/collect/get_pipeline_new.py \
+$PYTHON_CMD "$PROJ_ROOT/multi_swe_bench/collect/get_pipeline_new.py" \
     --out_dir "$OUTPUT_DIR" \
     $PIPELINE_TOKEN_ARGS
 
