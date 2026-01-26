@@ -144,14 +144,13 @@ def main(tokens, out_dir: Path, filtered_prs_file: Path):
 
         # Fetch issues in chunks via Search API to avoid long URLs
         target_list = sorted(list(target_issues))
-        chunk_size = 50
+        chunk_size = 5
         pbar = tqdm(total=len(target_list), desc="Issues")
         for i in range(0, len(target_list), chunk_size):
             chunk = target_list[i : i + chunk_size]
-            # Build query like: repo:org/repo is:issue number:123 number:456 ...
-            query_parts = [f"repo:{org}/{repo}", "is:issue"]
+            query_parts = [f"repo:{org}/{repo}"]
             for num in chunk:
-                query_parts.append(f"number:{num}")
+                query_parts.append(f"{num}")
             query = " ".join(query_parts)
 
             url = f"https://api.github.com/search/issues?q={query}"
@@ -171,6 +170,8 @@ def main(tokens, out_dir: Path, filtered_prs_file: Path):
             data = resp.json()
             items = data.get("items", [])
             for item in items:
+                if "pull_request" in item and item["pull_request"]:
+                    continue
                 out_file.write(
                     json.dumps(
                         {

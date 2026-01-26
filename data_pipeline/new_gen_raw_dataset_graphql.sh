@@ -169,6 +169,16 @@ done
 echo "   Total PRs across all repositories: $TOTAL_PR_COUNT"
 
 echo ""
+echo "Step 3: Running pipeline to process PRs"
+PIPELINE_TOKEN_ARGS=""
+if [ -n "$TOKEN" ]; then
+    PIPELINE_TOKEN_ARGS="--tokens $TOKEN"
+fi
+$PYTHON_CMD ../multi_swe_bench/collect/get_pipeline_new.py \
+    --out_dir "$OUTPUT_DIR" \
+    $PIPELINE_TOKEN_ARGS
+
+echo ""
 echo "🎉 All done! Output files:"
 echo "   - Repos: $REPOS_CSV ($REPO_COUNT repositories)"
 echo "   - PR files: $PR_FILES filtered PRs files created ($TOTAL_PR_COUNT total PRs)"

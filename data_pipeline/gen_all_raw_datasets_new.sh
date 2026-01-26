@@ -20,12 +20,12 @@ for lang in "${LANGUAGES[@]}"; do
     # -l language: from array
     # -s min_stars: 10000
     # -n max_results: 200
-    # -c created_at: 2025-10-15
-    bash "$SCRIPT_DIR/gen_raw_dataset.sh" \
+    # -m merged_after: 2026-01-01
+    bash "$SCRIPT_DIR/new_gen_raw_dataset_graphql.sh" \
         -l "$lang" \
         -s 10000 \
         -n 200 \
-        -c 2025-10-15
+        -m 2026-01-01
         
     echo "Finished processing $lang."
 done

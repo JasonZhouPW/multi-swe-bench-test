@@ -137,9 +137,10 @@ class ResolvedIssue:
 @dataclass_json
 @dataclass
 class Base:
-    label: str
-    ref: str
-    sha: str
+    label: str = ""
+    ref: str = ""
+    sha: str = ""
+    repo: Optional[dict] = None
 
     def __post_init__(self):
         if not isinstance(self.label, str):
@@ -183,26 +184,40 @@ class PullRequest(PullRequestBase):
     tag: str = ""
     number_interval: str = ""
     lang: str = ""
+    base_commit_hash: Optional[str] = None
+    head_ref_name: Optional[str] = None
+    related_issues: Optional[list[int]] = None
+    draft: bool = False
+    url: Optional[str] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+    closed_at: Optional[str] = None
+    merged_at: Optional[str] = None
 
     def __post_init__(self):
+        # Relax strict manual type checks to handle GraphQL-generated data
         if not isinstance(self.state, str):
             raise ValueError(f"Invalid state: {self.state}")
         if not isinstance(self.title, str):
             raise ValueError(f"Invalid title: {self.title}")
-        if not isinstance(self.body, str | None):
+        if not isinstance(self.body, (str, type(None))):
             raise ValueError(f"Invalid body: {self.body}")
         if not isinstance(self.base, Base):
             raise ValueError(f"Invalid base: {self.base}")
-        if not isinstance(self.resolved_issues, list):
+        if not isinstance(self.resolved_issues, (list, type(None))):
             raise ValueError(f"Invalid resolved_issues: {self.resolved_issues}")
         if not isinstance(self.fix_patch, str):
             raise ValueError(f"Invalid fix_patch: {self.fix_patch}")
         if not isinstance(self.test_patch, str):
             raise ValueError(f"Invalid test_patch: {self.test_patch}")
-        if not isinstance(self.head, (Base, type(None))):
-            raise ValueError(f"Invalid head: {self.head}")
-        if not isinstance(self.merge_commit_sha, (str, type(None))):
-            raise ValueError(f"Invalid merge_commit_sha: {self.merge_commit_sha}")
+
+        # Synchronize base.sha with base_commit_hash if needed
+        if self.base and not self.base.sha and self.base_commit_hash:
+            self.base.sha = self.base_commit_hash
+        
+        # Initialize head if missing but head_ref_name is present
+        if self.head is None and self.head_ref_name:
+            self.head = Base(ref=self.head_ref_name)
 
     @classmethod
     def from_dict(cls, d: dict) -> "PullRequest":

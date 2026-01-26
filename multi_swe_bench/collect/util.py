@@ -164,7 +164,7 @@ def make_request_with_retry(
             else:
                 return response
 
-            if is_rate_limited and attempt < max_retries - 1:
+            if is_rate_limited:
                 backoff_time = min(
                     initial_backoff * (backoff_multiplier**attempt), max_backoff
                 )

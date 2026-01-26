@@ -143,7 +143,7 @@ for RAW_FILE in "${FILES[@]}"; do
 
 
     echo "rm all docker images"
-    1. stop all docker containers
+    # 1. stop all docker containers
     docker container stop $(docker ps -aq) || true
     # 2. remove all docker containers
     docker container rm $(docker ps -aq) || true

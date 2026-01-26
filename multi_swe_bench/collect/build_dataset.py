@@ -112,7 +112,7 @@ def extract_patches_from_compare(pull: dict, token: str) -> tuple[str, str]:
 
     org = pull.get("org")
     repo = pull.get("repo")
-    base_sha = pull.get("base", {}).get("sha")
+    base_sha = pull.get("base_commit_hash")
     commits = pull.get("commits", [])
     test_patch = ""
     fix_patch = ""
@@ -120,7 +120,7 @@ def extract_patches_from_compare(pull: dict, token: str) -> tuple[str, str]:
     if not all([org, repo, base_sha]) or not commits:
         return fix_patch, test_patch
 
-    head_sha = commits[-1].get("sha")
+    head_sha = commits[-1].get("oid")
     if not head_sha:
         raise ValueError("Missing head SHA in last commit")
 
@@ -229,28 +229,19 @@ def main(
         out_dir / f"{org}__{repo}_raw_dataset.jsonl", "a", encoding="utf-8"
     ) as file:
         for pr in tqdm(filtered_prs_with_issues, desc="Building Dataset"):
-            # if (
-            #     pr["number"] in raw_dataset
-            #     or pr["number"] >= processed_number
-            #     or pr["number"] > failed_number
-            # ):
-            #     print(pr["number"])
-            #     print(processed_number,failed_number)
-            #     continue
-
             for attempt in range(retry_attempts):
                 try:
-                    fix_patch, test_patch = extract_patches_from_compare(
-                        pr, random.choice(tokens)
-                    )
+                    fix_patch, test_patch = extract_patches(pr, random.choice(tokens))
                     pr["fix_patch"] = fix_patch
                     pr["test_patch"] = test_patch
 
-                    if fix_patch == "" or test_patch == "":
-                        print(
-                            f"Skipping PR #{pr['number']}: empty fix_patch or test_patch"
-                        )
-                        continue
+                    if not fix_patch or fix_patch == "":
+                        print(f"Skipping PR #{pr['number']}: empty fix_patch")
+                        break
+                    # allow not test patch cases(refactor, docs, etc.)    
+                    # if not test_patch or test_patch == "":
+                    #     print(f"Skipping PR #{pr['number']}: empty test_patch")
+                    #     break
 
                     file.write(json.dumps(pr, ensure_ascii=False) + "\n")
                     break
