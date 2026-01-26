@@ -7,7 +7,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # Define the language array
-LANGUAGES=("Go" "Python" "Java" "Javascript" "Rust" "C" "C++" "Typescript" "Rust")
+LANGUAGES=("Python" "Java" "Javascript" "Rust" "C" "C++" "Typescript" "Go")
 
 echo "Starting batch raw dataset generation for languages: ${LANGUAGES[*]}"
 
@@ -25,7 +25,8 @@ for lang in "${LANGUAGES[@]}"; do
         -l "$lang" \
         -s 10000 \
         -n 200 \
-        -m 2026-01-01
+        -m 2025-12-15 \
+        -o "$SCRIPT_DIR/data/raw_datasets/all_raw_datasets/$lang"
         
     echo "Finished processing $lang."
 done
