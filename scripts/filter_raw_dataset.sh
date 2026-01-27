@@ -504,8 +504,8 @@ for jsonl_file in "$INPUT_DIR"/*_raw_dataset.jsonl; do
     
     echo "  输入: $input_count 条记录, 输出: $output_count 条记录"
     
-    # 如果输出文件为空,删除它
-    if [[ ! -s "$output_file" ]]; then
+    # 如果输出文件存在且为空,删除它
+    if [[ -f "$output_file" && ! -s "$output_file" ]]; then
         rm "$output_file"
         echo "  (输出为空,已删除)"
     fi

@@ -199,5 +199,4 @@ operator.sh
 repos/
 repos/*/__init__.py
 configs/
-multi_swe_bench/harness/
 multi_swe_bench/harness/repos/*.*
