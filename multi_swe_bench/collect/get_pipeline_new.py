@@ -15,6 +15,7 @@
 import argparse
 import re
 from pathlib import Path
+from typing import Optional
 
 from multi_swe_bench.collect.build_dataset import main as build_dataset
 from multi_swe_bench.collect.get_related_issues import main as get_related_issues
@@ -48,6 +49,12 @@ def get_parser() -> argparse.ArgumentParser:
         default=3,
         help="Number of attempts to retry on error.",
     )
+    parser.add_argument(
+        "--language",
+        type=str,
+        default=None,
+        help="The programming language of the repository.",
+    )
 
     return parser
 
@@ -59,6 +66,7 @@ def run_pipeline(
     repo: str,
     delay_on_error: int = 300,
     retry_attempts: int = 3,
+    language: Optional[str] = None,
 ) -> None:
     print(f"\n{'=' * 60}")
     print(f"Processing: {org}/{repo}")
@@ -75,7 +83,7 @@ def run_pipeline(
     print("\n=== Step 3: Build Dataset ===")
     dataset_file = out_dir / f"{org}__{repo}_filtered_prs_with_issues.jsonl"
     print("Dataset file:", dataset_file)
-    build_dataset(tokens, out_dir, dataset_file, delay_on_error, retry_attempts)
+    build_dataset(tokens, out_dir, dataset_file, delay_on_error, retry_attempts, language)
 
     print("\n=== Pipeline Completed Successfully ===")
 
@@ -114,4 +122,5 @@ if __name__ == "__main__":
             repo=repo,
             delay_on_error=args.delay_on_error,
             retry_attempts=args.retry_attempts,
+            language=args.language,
         )

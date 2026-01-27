@@ -65,6 +65,12 @@ def get_parser() -> argparse.ArgumentParser:
         default=3,
         help="Number of attempts to retry on error.",
     )
+    parser.add_argument(
+        "--language",
+        type=str,
+        default=None,
+        help="The programming language of the repository.",
+    )
 
     return parser
 
@@ -186,6 +192,7 @@ def main(
     filtered_prs_with_issues_file: Path,
     delay_on_error: int,
     retry_attempts: int,
+    language: Optional[str] = None,
 ):
     print("starting build complete dataset")
     print(f"Tokens: {tokens}")
@@ -193,6 +200,7 @@ def main(
     print(f"Dataset file: {filtered_prs_with_issues_file}")
     print(f"Delay on error: {delay_on_error}")
     print(f"Retry attempts: {retry_attempts}")
+    print(f"Language: {language}")
 
     org_repo_re = re.compile(r"(.+)__(.+)_filtered_prs_with_issues.jsonl")
     m = org_repo_re.match(filtered_prs_with_issues_file.name)
@@ -243,6 +251,8 @@ def main(
                     fix_patch, test_patch = extract_patches(pr, random.choice(tokens))
                     pr["fix_patch"] = fix_patch
                     pr["test_patch"] = test_patch
+                    if language:
+                        pr["language"] = language
 
                     if not fix_patch or fix_patch == "":
                         print(f"Skipping PR #{pr['number']}: empty fix_patch")
@@ -278,4 +288,5 @@ if __name__ == "__main__":
         args.filtered_prs_with_issues_file,
         args.delay_on_error,
         args.retry_attempts,
+        args.language,
     )

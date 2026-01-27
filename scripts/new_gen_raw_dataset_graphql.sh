@@ -181,6 +181,7 @@ if [ -n "$TOKEN" ]; then
 fi
 $PYTHON_CMD "$PROJ_ROOT/multi_swe_bench/collect/get_pipeline_new.py" \
     --out_dir "$OUTPUT_DIR" \
+    --language "$LANGUAGE" \
     $PIPELINE_TOKEN_ARGS
 
 echo ""
