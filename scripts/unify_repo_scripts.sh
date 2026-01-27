@@ -46,20 +46,44 @@ else
     exit 1
 fi
 
-# LINE=$(head -n 1 "$INPUT")
-# LANG_RAW=$(echo "$LINE" | sed -n 's/.*"language": *"\([^"]*\)".*/\1/p')
-# LANG_RAW=$(echo "$LANG_RAW" | tr 'A-Z' 'a-z')
+## Initialize multi-swe-bench repo structure
+mkdir -p "$PROJ_ROOT/multi-swe-bench/harness/repos/c"
+mkdir -p "$PROJ_ROOT/multi-swe-bench/harness/repos/cpp"
+mkdir -p "$PROJ_ROOT/multi-swe-bench/harness/repos/csharp"
+mkdir -p "$PROJ_ROOT/multi-swe-bench/harness/repos/golang"
+mkdir -p "$PROJ_ROOT/multi-swe-bench/harness/repos/html"
+mkdir -p "$PROJ_ROOT/multi-swe-bench/harness/repos/java"
+mkdir -p "$PROJ_ROOT/multi-swe-bench/harness/repos/javascript"
+mkdir -p "$PROJ_ROOT/multi-swe-bench/harness/repos/kotlin"
+mkdir -p "$PROJ_ROOT/multi-swe-bench/harness/repos/php"
+mkdir -p "$PROJ_ROOT/multi-swe-bench/harness/repos/python"
+mkdir -p "$PROJ_ROOT/multi-swe-bench/harness/repos/rust"
+mkdir -p "$PROJ_ROOT/multi-swe-bench/harness/repos/ruby"
+mkdir -p "$PROJ_ROOT/multi-swe-bench/harness/repos/scala"
+mkdir -p "$PROJ_ROOT/multi-swe-bench/harness/repos/swift"
+mkdir -p "$PROJ_ROOT/multi-swe-bench/harness/repos/typescript"
 
-# echo "🔍 Detected language: $LANG_RAW"
-# # if [ -z "$LANG_RAW" ]; then
-# #     LANG_RAW="java"
-# # fi
-# if [ "$LANG_RAW" == "Go" ]; then
-#     LANG_RAW="golang"
-# fi
-# GEN_INSTANCE="./data_pipeline/gen_instance_from_dataset_${LANG_RAW}.sh"
-# echo " Using GEN_INSTANCE: $GEN_INSTANCE"
-# chmod +x "$GEN_INSTANCE"
+# Check if __init__.py exists in each repo directory
+INIT_FILE="$PROJ_ROOT/multi-swe-bench/harness/repos/__init__.py"
+if [ ! -f "$INIT_FILE" ]; then
+    cat <<EOF > "$INIT_FILE"
+from multi_swe_bench.harness.repos.c import *
+from multi_swe_bench.harness.repos.cpp import *
+from multi_swe_bench.harness.repos.golang import *
+from multi_swe_bench.harness.repos.java import *
+from multi_swe_bench.harness.repos.javascript import *
+from multi_swe_bench.harness.repos.python import *
+from multi_swe_bench.harness.repos.rust import *
+from multi_swe_bench.harness.repos.typescript import *
+from multi_swe_bench.harness.repos.ruby import *
+from multi_swe_bench.harness.repos.php import *
+from multi_swe_bench.harness.repos.swift import *
+from multi_swe_bench.harness.repos.kotlin import *
+from multi_swe_bench.harness.repos.scala import *
+from multi_swe_bench.harness.repos.csharp import *
+from multi_swe_bench.harness.repos.html import *
+EOF
+fi
 
 ########################################
 # Process all matched files
@@ -133,7 +157,7 @@ for RAW_FILE in "${FILES[@]}"; do
     "$SCRIPT_DIR/../data_pipeline/build_dataset.sh" "$RAW_FILE" 
 
     ##########################################
-    # 推导 dataset 文件名（多条合并在一个文件中）
+    # Derive dataset filename (multiple entries merged in one file)
     ##########################################
     DATASET_FILE="${BASE_NAME}_dataset.jsonl"
     DATASET_PATH="$PROJ_ROOT/data/datasets/$DATASET_FILE"
@@ -146,17 +170,17 @@ for RAW_FILE in "${FILES[@]}"; do
     fi
 
 
-    echo "rm all docker images"
-    # 1. stop all docker containers
+    echo "Remove all docker images"
+    # 1. Stop all docker containers
     docker container stop $(docker ps -aq) || true
-    # 2. remove all docker containers
+    # 2. Remove all docker containers
     docker container rm $(docker ps -aq) || true
-    # 3. remove all docker images
+    # 3. Remove all docker images
     docker rmi $( docker images --format "table {{.Repository}}\t{{.ID}}" | grep -v "mswebench/nix_swe" | awk '{print $2}') || true
 done
 
 ##########################################
-# Finally: 构建 dataset（支持多条记录）
+# Finally: Build dataset (supports multiple records)
 ##########################################
 # echo "========================================="
 # echo "🚀 Finally: Building dataset..."
@@ -172,7 +196,7 @@ done
 # ./data_pipeline/build_dataset.sh "$RAW_FILE"
 
 # ##########################################
-# # 推导 dataset 文件名（多条合并在一个文件中）
+# # Derive dataset filename (multiple entries merged in one file)
 # ##########################################
 # DATASET_FILE="${BASE_NAME}_dataset.jsonl"
 # DATASET_PATH="./data/datasets/$DATASET_FILE"

@@ -98,7 +98,7 @@ echo "   $TARGET_FILE"
 echo "   $INIT_FILE"
 
 ###################################################
-# Golang enhanced template (通用模板)
+# Golang enhanced template (generic template)
 ###################################################
 cat > "$TARGET_FILE" << 'EOF'
 import re

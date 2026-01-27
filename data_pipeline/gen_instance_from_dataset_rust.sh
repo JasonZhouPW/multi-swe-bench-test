@@ -92,7 +92,7 @@ echo "📄 Generating instance file:"
 echo "   $TARGET_FILE"
 
 ###################################################
-# Golang enhanced template (通用模板)
+# Rust enhanced template (generic template)
 ###################################################
 cat > "$TARGET_FILE" << 'EOF'
 import re

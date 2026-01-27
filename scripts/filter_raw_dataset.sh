@@ -1,39 +1,39 @@
 #!/bin/bash
 
 # ============================================================================
-# 过滤 *_raw_dataset.jsonl 文件
-# 根据用户输入的关键字(可以是多个)或 category(label) 过滤出符合条件的记录
-# 输出到指定的 output dir 中
+# Filter *_raw_dataset.jsonl files
+# Filter records based on user input keywords (can be multiple) or category/label
+# Output to specified output directory
 # ============================================================================
 
 set -e
 
-# 显示使用说明
+# Show usage instructions
 function show_usage() {
     echo "Usage: $0 -i <input_dir> -o <output_dir> [options]"
     echo ""
     echo "Required arguments:"
-    echo "  -i, --input-dir     指定输入文件夹路径 (包含 *_raw_dataset.jsonl 文件)"
-    echo "  -o, --output-dir    指定输出文件夹路径"
+    echo "  -i, --input-dir     Specify input directory path (contains *_raw_dataset.jsonl files)"
+    echo "  -o, --output-dir    Specify output directory path"
     echo ""
-    echo "Filter options (至少指定一个):"
-    echo "  -k, --keywords      关键字过滤 (逗号分隔多个关键字, 在 title 和 body 中搜索)"
-    echo "  -c, --category      按 label/category 过滤 (逗号分隔多个 category)"
+    echo "Filter options (must specify at least one):"
+    echo "  -k, --keywords      Filter by (comma-separated keywords, search in title and body)"
+    echo "  -c, --category      Filter by label/category (comma-separated categories)"
     echo ""
     echo "Optional arguments:"
-    echo "  -m, --match-mode    匹配模式: 'any' (默认, 匹配任意一个) 或 'all' (匹配所有)"
-    echo "  -s, --case-sensitive  区分大小写 (默认不区分)"
-    echo "  -p, --min-patch-size  指定最小 patch 大小 (单位: bytes, 默认 0 不限制)"
-    echo "  -h, --help          显示帮助信息"
+    echo "  -m, --match-mode    Match mode: 'any' (default, match any) or 'all' (match all)"
+    echo "  -s, --case-sensitive  Case sensitive (default is not case sensitive)"
+    echo "  -p, --min-patch-size  Specify minimum patch size (unit: bytes, default 0 no limit)"
+    echo "  -h, --help          Show help information"
     echo ""
     echo "Examples:"
-    echo "  # 按关键字过滤 (匹配 title 或 body 中包含 'fix' 或 'bug' 的记录)"
+    echo "  # Filter by keyword (match records containing 'fix' or 'bug' in title or body)"
     echo "  $0 -i ./raw_ds -o ./filtered -k 'fix,bug'"
     echo ""
-    echo "  # 按 category/label 过滤"
+    echo "  # Filter by category/label"
     echo "  $0 -i ./raw_ds -o ./filtered -c 'bug,enhancement'"
     echo ""
-    echo "  # 同时使用关键字和 category 过滤 (需要同时满足)"
+    echo "  # Use both keyword and category filter (must satisfy both)"
     echo "  $0 -i ./raw_ds -o ./filtered -k 'fix' -c 'bug' -m all"
     echo ""
     exit 1
@@ -89,32 +89,32 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# 验证必需参数
+# Validate required parameters
 if [[ -z "$INPUT_DIR" ]]; then
-    echo "Error: 请指定输入文件夹 (-i)"
+    echo "Error: Please specify input directory (-i)"
     show_usage
 fi
 
 if [[ -z "$OUTPUT_DIR" ]]; then
-    echo "Error: 请指定输出文件夹 (-o)"
+    echo "Error: Please specify output directory (-o)"
     show_usage
 fi
 
-# 如果未指定过滤条件，提供交互式菜单
+# If no filter conditions specified, provide interactive menu
 if [[ -z "$KEYWORDS" && -z "$CATEGORIES" ]]; then
     echo "============================================"
-    echo "未检测到过滤条件，请选择预设类别:"
+    echo "No filter conditions detected, please select a preset category:"
     echo "1. New Feature (新功能)"
     echo "2. Bug Fix (Bug修复)"
     echo "3. Edge Case & Robustness (边界情况与健壮性)"
     echo "4. Performance Improvements (性能优化)"
     echo "5. Refactor (代码重构)"
-    echo "6. 退出"
+    echo "6. Exit"
     echo "============================================"
-    
+
     choice=""
     while [[ ! "$choice" =~ ^[1-6]$ ]]; do
-        read -p "请输入选项 [1-6]: " choice
+        read -p "Please enter option [1-6]: " choice
     done
     
     case $choice in
@@ -127,33 +127,33 @@ if [[ -z "$KEYWORDS" && -z "$CATEGORIES" ]]; then
     esac
     
     echo ""
-    read -p "是否需要额外关键字过滤? (直接回车跳过): " input_kw
+    read -p "Do you need additional keyword filtering? (press Enter to skip): " input_kw
     if [[ -n "$input_kw" ]]; then
         KEYWORDS="$input_kw"
     fi
 fi
 
 if [[ ! -d "$INPUT_DIR" ]]; then
-    echo "Error: 输入文件夹不存在: $INPUT_DIR"
+    echo "Error: Input directory does not exist: $INPUT_DIR"
     exit 1
 fi
 
-# 创建输出目录
+# Create output directory
 mkdir -p "$OUTPUT_DIR"
 
 # ============================================================================
-# 函数: 计算代码补丁大小 (不包含文档文件)
+# Function: Calculate code patch size (excluding documentation files)
 # ============================================================================
 calculate_code_patch_size() {
     local patch="$1"
     
-    # 使用 awk 来解析 diff 并排除文档。逻辑参考 filter_large_patches.sh
+    # Use awk to parse diff and exclude documentation files. Logic from filter_large_patches.sh
     echo "$patch" | awk '
     BEGIN {
         in_doc = 0
         hunk_size = 0
         total = 0
-        # 文档扩展名
+        # Documentation extensions
         split(".md .txt .rst .adoc .asciidoc .readme README CHANGELOG CONTRIBUTING LICENSE NOTICE AUTHORS .gitignore .dockerignore", exts, " ")
         for (i in exts) doc_map[exts[i]] = 1
     }
@@ -187,7 +187,7 @@ calculate_code_patch_size() {
 }
 
 # ============================================================================
-# 特殊预设: 当 category 为 "new feature" 或 "fix bug" 时，自动使用方法3(关键字+label组合过滤)
+# Special presets: When category is "new feature" or "fix bug", automatically use method 3 (keyword + label combination filtering)
 # ============================================================================
 USE_PRESET_MODE=false
 
@@ -222,9 +222,9 @@ handle_special_presets() {
             CATEGORIES="$CATEGORIES,$new_feature_labels"
         fi
         
-        echo "扩展后的关键字: $KEYWORDS (任意一个匹配即可)"
-        echo "扩展后的 Categories: $CATEGORIES (任意一个匹配即可)"
-        echo "组合模式: 关键字匹配 AND Label匹配"
+        echo "Extended keywords: $KEYWORDS (match any one)"
+        echo "Extended Categories: $CATEGORIES (match any one)"
+        echo "Combination mode: Keyword match AND Label match"
         echo "============================================"
     fi
     
@@ -258,9 +258,9 @@ handle_special_presets() {
             CATEGORIES="$CATEGORIES,$fix_bug_labels"
         fi
         
-        echo "扩展后的关键字: $KEYWORDS (任意一个匹配即可)"
-        echo "扩展后的 Categories: $CATEGORIES (任意一个匹配即可)"
-        echo "组合模式: 关键字匹配 AND Label匹配"
+        echo "Extended keywords: $KEYWORDS (match any one)"
+        echo "Extended Categories: $CATEGORIES (match any one)"
+        echo "Combination mode: Keyword match AND Label match"
         echo "============================================"
     fi
     
@@ -296,9 +296,9 @@ handle_special_presets() {
             CATEGORIES="$CATEGORIES,$edge_case_labels"
         fi
         
-        echo "扩展后的关键字: $KEYWORDS (任意一个匹配即可)"
-        echo "扩展后的 Categories: $CATEGORIES (任意一个匹配即可)"
-        echo "组合模式: 关键字匹配 AND Label匹配"
+        echo "Extended keywords: $KEYWORDS (match any one)"
+        echo "Extended Categories: $CATEGORIES (match any one)"
+        echo "Combination mode: Keyword match AND Label match"
         echo "============================================"
     fi
 
@@ -330,9 +330,9 @@ handle_special_presets() {
             CATEGORIES="$CATEGORIES,$perf_labels"
         fi
         
-        echo "扩展后的关键字: $KEYWORDS (任意一个匹配即可)"
-        echo "扩展后的 Categories: $CATEGORIES (任意一个匹配即可)"
-        echo "组合模式: 关键字匹配 AND Label匹配"
+        echo "Extended keywords: $KEYWORDS (match any one)"
+        echo "Extended Categories: $CATEGORIES (match any one)"
+        echo "Combination mode: Keyword match AND Label match"
         echo "============================================"
     fi
     
@@ -364,9 +364,9 @@ handle_special_presets() {
             CATEGORIES="$CATEGORIES,$refactor_labels"
         fi
         
-        echo "扩展后的关键字: $KEYWORDS (任意一个匹配即可)"
-        echo "扩展后的 Categories: $CATEGORIES (任意一个匹配即可)"
-        echo "组合模式: 关键字匹配 AND Label匹配"
+        echo "Extended keywords: $KEYWORDS (match any one)"
+        echo "Extended Categories: $CATEGORIES (match any one)"
+        echo "Combination mode: Keyword match AND Label match"
         echo "============================================"
     fi
 }
@@ -390,9 +390,9 @@ build_jq_filter() {
     local keyword_filter=""
     local category_filter=""
     
-    # 确定关键字和 label 内部匹配模式
-    # 预设模式：内部用 any，组合用 all
-    # 普通模式：都用用户指定的 MATCH_MODE
+    # Determine keyword and label internal match mode
+    # Preset mode: internal uses any, combination uses all
+    # Normal mode: both use user-specified MATCH_MODE
     local internal_kw_mode="$MATCH_MODE"
     local internal_cat_mode="$MATCH_MODE"
     local combine_mode="$MATCH_MODE"
@@ -472,26 +472,26 @@ build_jq_filter() {
     fi
 }
 
-# 检查 jq 是否安装
+# Check if jq is installed
 if ! command -v jq &> /dev/null; then
-    echo "Error: jq 未安装。请先安装 jq: brew install jq (macOS) 或 apt-get install jq (Linux)"
+    echo "Error: jq not installed. Please install jq first: brew install jq (macOS) or apt-get install jq (Linux)"
     exit 1
 fi
 
-# 构建过滤表达式
+# Build filter expression
 JQ_FILTER=$(build_jq_filter)
-echo "JQ 过滤表达式: $JQ_FILTER"
+echo "JQ filter expression: $JQ_FILTER"
 echo "============================================"
 
-# 统计
+# Statistics
 total_files=0
 total_input_records=0
 total_output_records=0
 
-# 查找所有 *_raw_dataset.jsonl 文件
+# Find all *_raw_dataset.jsonl files
 for jsonl_file in "$INPUT_DIR"/*_raw_dataset.jsonl; do
     if [[ ! -f "$jsonl_file" ]]; then
-        echo "警告: 在 $INPUT_DIR 中没有找到 *_raw_dataset.jsonl 文件"
+        echo "Warning: No *_raw_dataset.jsonl files found in $INPUT_DIR"
         break
     fi
     
@@ -500,21 +500,21 @@ for jsonl_file in "$INPUT_DIR"/*_raw_dataset.jsonl; do
     filename=$(basename "$jsonl_file")
     output_file="$OUTPUT_DIR/$filename"
     
-    echo "处理: $filename"
-    
-    # 统计输入记录数
+    echo "Processing: $filename"
+
+    # Count input records
     input_count=$(wc -l < "$jsonl_file" | xargs)
     ((total_input_records += input_count)) || true
-    
-    # 逐行处理 (为了能够根据 patch size 过滤)
+
+    # Process line by line (to filter by patch size)
     while IFS= read -r line; do
         [[ -z "$line" ]] && continue
-        
-        # 1. 首先尝试 JQ 过滤
+
+        # 1. First try JQ filtering
         filtered_line=$(echo "$line" | jq -c "select($JQ_FILTER)")
-        
+
         if [[ -n "$filtered_line" ]]; then
-            # 2. 如果存在 MIN_PATCH_SIZE 限制，则计算 patch 大小
+            # 2. If MIN_PATCH_SIZE limit exists, calculate patch size
             if [[ "$MIN_PATCH_SIZE" -gt 0 ]]; then
                 patch_content=$(echo "$filtered_line" | jq -r '.fix_patch // empty')
                 if [[ -n "$patch_content" ]]; then
@@ -524,33 +524,33 @@ for jsonl_file in "$INPUT_DIR"/*_raw_dataset.jsonl; do
                     fi
                 fi
             else
-                # 没有 patch size 限制，直接写入
+                # No patch size limit, write directly
                 echo "$filtered_line" >> "$output_file"
             fi
         fi
     done < "$jsonl_file"
-    
-    # 统计输出记录数
+
+    # Count output records
     if [[ -f "$output_file" ]]; then
         output_count=$(wc -l < "$output_file" | xargs)
     else
         output_count=0
     fi
     ((total_output_records += output_count)) || true
-    
-    echo "  输入: $input_count 条记录, 输出: $output_count 条记录"
-    
-    # 如果输出文件存在且为空,删除它
+
+    echo "  Input: $input_count records, Output: $output_count records"
+
+    # If output file exists and is empty, delete it
     if [[ -f "$output_file" && ! -s "$output_file" ]]; then
         rm "$output_file"
-        echo "  (输出为空,已删除)"
+        echo "  (Output is empty, deleted)"
     fi
 done
 
 echo "============================================"
-echo "处理完成!"
-echo "处理文件数: $total_files"
-echo "总输入记录: $total_input_records"
-echo "总输出记录: $total_output_records"
-echo "输出目录: $OUTPUT_DIR"
+echo "Processing completed!"
+echo "Processed files: $total_files"
+echo "Total input records: $total_input_records"
+echo "Total output records: $total_output_records"
+echo "Output directory: $OUTPUT_DIR"
 echo "============================================"

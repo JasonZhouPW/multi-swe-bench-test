@@ -33,7 +33,7 @@ if [ -z "$LANG_RAW" ]; then
 fi
 
 LANG=$(echo "$LANG_RAW" | tr 'A-Z' 'a-z')
-# change LANG to lowercase
+# Change LANG to lowercase
 
 
 
@@ -102,7 +102,7 @@ echo "📄 Generating instance file:"
 echo "   $TARGET_FILE"
 
 ###################################################
-# Golang enhanced template (通用模板)
+# Java enhanced template (generic template)
 ###################################################
 cat > "$TARGET_FILE" << 'EOF'
 import os
