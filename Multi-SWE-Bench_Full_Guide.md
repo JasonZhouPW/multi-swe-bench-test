@@ -30,16 +30,16 @@ Multi-SWE-Bench 是用于评估和训练代码修复系统的框架。本流水�
 
 ```
 Step1: 生成 Raw Dataset
-  ├─ gen_raw_dataset.sh
-  └─ collect_raw_dataset.sh
+  ├─ scripts/gen_raw_dataset.sh
+  └─ scripts/collect_raw_dataset.sh
 
-Step2: 生成 Repo Docker 与脚本（unify_repo_scripts.sh）
+Step2: 生成 Repo Docker 与脚本（scripts/unify_repo_scripts.sh）
   (依赖 Step1 输出 raw_dataset)
 
-Step3: 使用 LLM 生成 Patch（run_patch.sh）
+Step3: 使用 LLM 生成 Patch（scripts/run_patch.sh）
   (依赖 Step1 输出 raw_dataset)
 
-Step4: 执行 Evaluation（run_full_pipeline.sh）
+Step4: 执行 Evaluation（scripts/run_full_pipeline.sh）
   (依赖 Step2 + Step3 输出)
 ```
 
@@ -163,11 +163,11 @@ Step1 → Step2 →
 
 ### 并行建议
 
-```
-./unify_repo_scripts.sh &          # Step2
+```bash
+./scripts/unify_repo_scripts.sh &          # Step2
 python gen_patch_from_raw_dataset.py &   # Step3
 wait
-./run_full_pipeline.sh
+./scripts/run_full_pipeline.sh
 ```
 
 ---
@@ -224,26 +224,26 @@ RUN apk add --no-cache bash  # 或 apt-get install -y bash
 ### Step1：生成 Raw Dataset
 
 ```bash
-./gen_raw_dataset.sh owner/repo
-./collect_raw_dataset.sh
+./scripts/gen_raw_dataset.sh owner/repo
+./scripts/collect_raw_dataset.sh
 ```
 
 ### Step2：生成 Docker & repo 脚本, 并生成 dataset 文件
 
 ```bash
-./unify_repo_scripts.sh data/raw_datasets/*_raw_dataset.jsonl
+./scripts/unify_repo_scripts.sh data/raw_datasets/*_raw_dataset.jsonl
 ```
 
 ### Step3：生成 patch
 
 ```bash
- ./run_patch.sh  data/raw_datasets/*_raw_dataset.jsonl
+./scripts/run_patch.sh data/raw_datasets/*_raw_dataset.jsonl
 ```
 
 ### Step4：评测 run_evaluation
 
 ```bash
-./run_full_pipeline.sh data/raw_datasets/*_raw_dataset.jsonl
+./scripts/run_full_pipeline.sh data/raw_datasets/*_raw_dataset.jsonl
 ```
 
 ---

@@ -37,34 +37,34 @@ The pipeline follows a structured 5-step process. Detailed instructions can be f
 Fetch PRs from GitHub and consolidate them into raw JSONL files.
 ```bash
 # New GraphQL-based collection (Recommended)
-./shells/new_gen_raw_dataset_graphql.sh -l Python -s 10000 -n 5 -o ./data/raw_datasets/test_py
+./scripts/new_gen_raw_dataset_graphql.sh -l Python -s 10000 -n 5 -o ./data/raw_datasets/test_py
 
 # Complete and categorize data
-./shells/collect_raw_dataset.sh
+./scripts/collect_raw_dataset.sh
 ```
 
 ### 2. (Optional) Filter & Refine Data
 Filter by bug type or patch complexity.
 ```bash
-./shells/filter_raw_dataset.sh -i ./data/raw_datasets -o ./data/filtered -p 1024
+./scripts/filter_raw_dataset.sh -i ./data/raw_datasets -o ./data/filtered -p 1024
 ```
 
 ### 3. Build Dataset & Environment
 Generate Dockerfiles and environment scripts for evaluation.
 ```bash
-./shells/unify_repo_scripts.sh data/raw_datasets/example_raw_dataset.jsonl
+./scripts/unify_repo_scripts.sh data/raw_datasets/example_raw_dataset.jsonl
 ```
 
 ### 4. Generate Repair Patches
 Use agents like **SWE-Agent** or tools like **Massgen** to generate fixes.
 ```bash
-./shells/run_patch.sh data/raw_datasets/example_raw_dataset.jsonl
+./scripts/run_patch.sh data/raw_datasets/example_raw_dataset.jsonl
 ```
 
 ### 5. Run Evaluation
 Execute the final benchmark evaluation.
 ```bash
-./shells/run_full_pipeline.sh data/raw_datasets/example_raw_dataset.jsonl
+./scripts/run_full_pipeline.sh data/raw_datasets/example_raw_dataset.jsonl
 ```
 
 ---
@@ -73,19 +73,19 @@ Execute the final benchmark evaluation.
 
 | Task | Command |
 |------|---------|
-| **GraphQL Fetch** | `./shells/new_gen_raw_dataset_graphql.sh -l [Lang] -s [Stars] -o [Dir]` |
-| **Unified Setup** | `./shells/unify_repo_scripts.sh [Raw_Dataset]` |
-| **Run Agent** | `./shells/run_patch.sh [Raw_Dataset]` |
-| **Evaluate** | `./shells/run_full_pipeline.sh [Raw_Dataset]` |
-| **Quality Check**| `./shells/analyze_patch.sh [Semgrep_Output]` |
-| **Training Data**| `./shells/extract_training_data.sh [Input_Path] [Output_JSON]` |
+| **GraphQL Fetch** | `./scripts/new_gen_raw_dataset_graphql.sh -l [Lang] -s [Stars] -o [Dir]` |
+| **Unified Setup** | `./scripts/unify_repo_scripts.sh [Raw_Dataset]` |
+| **Run Agent** | `./scripts/run_patch.sh [Raw_Dataset]` |
+| **Evaluate** | `./scripts/run_full_pipeline.sh [Raw_Dataset]` |
+| **Quality Check**| `./scripts/analyze_patch.sh [Semgrep_Output]` |
+| **Training Data**| `./scripts/extract_training_data.sh [Input_Path] [Output_JSON]` |
 
 ---
 
 ## 📂 Directory Structure
 - `multi_swe_bench/`: Core Python logic and harness.
 - `data_pipeline/`: Internal scripts for data processing.
-- `shells/`: Unified entry-point scripts for root-level execution.
+- `scripts/`: Unified entry-point scripts for root-level execution.
 - `data/`: Generated datasets, patches, logs, and environments.
 
 
