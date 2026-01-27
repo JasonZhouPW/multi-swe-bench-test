@@ -18,6 +18,9 @@
 
 ## 全流程顺序（按序执行） 📋
 
+> [!TIP]
+> **新功能**：现在可以使用根目录下的 `./entry.sh` 脚本通过交互式菜单快速执行以下常用步骤。
+
 1) **Step1 — 生成 Raw Dataset（必须最先执行）**
 - 目的：从 GitHub 拉取 PR 并整合为 `*_raw_dataset.jsonl`
 - 主要脚本：
@@ -115,6 +118,8 @@ wait
   - `./scripts/collect_raw_dataset.sh`
   - 数据过滤: `./scripts/filter_raw_dataset.sh -i ./raw_ds -o ./filtered -p 1024`
   - 生成训练数据: `./scripts/extract_training_data.sh data/datasets output.json`
+- 交互式入口:
+  - `bash entry.sh`
 - Step2:
   - `./scripts/unify_repo_scripts.sh data/raw_datasets/*_raw_dataset.jsonl`
   - 或单文件：`./data_pipeline/build_dataset.sh <raw_dataset.jsonl>`

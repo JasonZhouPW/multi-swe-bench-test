@@ -27,6 +27,12 @@ cd multi-swe-bench
 make install
 ```
 
+### 🎯 Quick Start
+Use the interactive entry script to start common tasks:
+```bash
+bash entry.sh
+```
+
 ---
 
 ## 📋 Full Execution Pipeline
@@ -84,9 +90,10 @@ Execute the final benchmark evaluation.
 
 ## 📂 Directory Structure
 - `multi_swe_bench/`: Core Python logic and harness.
-- `data_pipeline/`: Internal scripts for data processing.
-- `scripts/`: Unified entry-point scripts for root-level execution.
+- `data_pipeline/`: Internal worker scripts for data processing.
+- `scripts/`: Unified entry-point scripts.
 - `data/`: Generated datasets, patches, logs, and environments.
+- `entry.sh`: Interactive root-level entry points for convenience.
 
 
 ## 📜 License
