@@ -108,12 +108,13 @@ if [[ -z "$KEYWORDS" && -z "$CATEGORIES" ]]; then
     echo "2. Bug Fix (Bug修复)"
     echo "3. Edge Case & Robustness (边界情况与健壮性)"
     echo "4. Performance Improvements (性能优化)"
-    echo "5. 退出"
+    echo "5. Refactor (代码重构)"
+    echo "6. 退出"
     echo "============================================"
     
     choice=""
-    while [[ ! "$choice" =~ ^[1-5]$ ]]; do
-        read -p "请输入选项 [1-5]: " choice
+    while [[ ! "$choice" =~ ^[1-6]$ ]]; do
+        read -p "请输入选项 [1-6]: " choice
     done
     
     case $choice in
@@ -121,7 +122,8 @@ if [[ -z "$KEYWORDS" && -z "$CATEGORIES" ]]; then
         2) CATEGORIES="fix bug";;
         3) CATEGORIES="edge case & robustness";;
         4) CATEGORIES="performance improvements";;
-        5) exit 0;;
+        5) CATEGORIES="refactor";;
+        6) exit 0;;
     esac
     
     echo ""
@@ -326,6 +328,40 @@ handle_special_presets() {
             CATEGORIES="$perf_labels"
         else
             CATEGORIES="$CATEGORIES,$perf_labels"
+        fi
+        
+        echo "扩展后的关键字: $KEYWORDS (任意一个匹配即可)"
+        echo "扩展后的 Categories: $CATEGORIES (任意一个匹配即可)"
+        echo "组合模式: 关键字匹配 AND Label匹配"
+        echo "============================================"
+    fi
+    
+    # 检查是否包含 "refactor" 或其变体
+    if [[ "$categories_lower" == *"refactor"* ]] || \
+       [[ "$categories_lower" == *"cleanup"* ]] || \
+       [[ "$categories_lower" == *"reorganize"* ]]; then
+        
+        echo "============================================"
+        echo "检测到 'refactor' 预设，自动启用组合过滤模式"
+        echo "============================================"
+        
+        USE_PRESET_MODE=true
+        
+        # 设置重构相关的关键字 (在 title 和 body 中搜索)
+        local refactor_keywords="refactor,refactoring,refactored,clean,cleanup,reorganize,rename,restructure,simplify,simplification,extract,move,migrate,migration,polish,style"
+        if [[ -z "$KEYWORDS" ]]; then
+            KEYWORDS="$refactor_keywords"
+        else
+            KEYWORDS="$KEYWORDS,$refactor_keywords"
+        fi
+        
+        # 设置重构相关的 labels
+        CATEGORIES=$(echo "$CATEGORIES" | sed -E 's/(refactor|cleanup|reorganize),?//gi' | sed 's/,$//' | sed 's/^,//')
+        local refactor_labels="refactor,cleanup,internal,internal-refactor,documentation,style"
+        if [[ -z "$CATEGORIES" ]]; then
+            CATEGORIES="$refactor_labels"
+        else
+            CATEGORIES="$CATEGORIES,$refactor_labels"
         fi
         
         echo "扩展后的关键字: $KEYWORDS (任意一个匹配即可)"
