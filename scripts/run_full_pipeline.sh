@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ##########################################
-# 参数校验（只需要 1 个参数：完整 .jsonl 路径）
+# Argument validation (only 1 argument required: full .jsonl path)
 ##########################################
 if [ $# -ne 1 ]; then
     echo "Usage: $0 <raw_dataset_path.jsonl>"
@@ -21,7 +21,7 @@ echo "📌 Using raw dataset: $RAW_DATASET_PATH"
 
 
 ##########################################
-# 自动拆分目录和文件名
+# Automatically split directory and filename
 ##########################################
 RAW_DIR="$(dirname "$RAW_DATASET_PATH")/"
 RAW_FILE="$(basename "$RAW_DATASET_PATH")"
@@ -31,12 +31,12 @@ echo "📄 RAW_FILE = $RAW_FILE"
 
 
 ##########################################
-# 自动推导 BASE_NAME（去掉 _raw_dataset.jsonl）
+# Automatically derive BASE_NAME (remove _raw_dataset.jsonl)
 ##########################################
 BASE_NAME="${RAW_FILE%%_raw_dataset.jsonl}"
 
 ##########################################
-# 自动推导 patch/dataset JSONL
+# Automatically derive patch/dataset JSONL
 ##########################################
 PATCH_JSONL="data/patches/${BASE_NAME}_patch.jsonl"
 DATASET_PATH="data/datasets/${BASE_NAME}_dataset.jsonl"
@@ -45,7 +45,7 @@ OUTPUT_DIR="data/output"
 mkdir -p "$OUTPUT_DIR"
 
 ##########################################
-# 检查 patch JSONL 是否存在
+# Check if patch JSONL exists
 ##########################################
 echo "🔍 Checking patch JSONL: $PATCH_JSONL"
 if [ ! -f "$PATCH_JSONL" ]; then
@@ -55,7 +55,7 @@ if [ ! -f "$PATCH_JSONL" ]; then
 fi
 
 ##########################################
-# 检查 dataset JSONL 是否存在
+# Check if dataset JSONL exists
 ##########################################
 echo "🔍 Checking dataset JSONL: $DATASET_PATH"
 if [ ! -f "$DATASET_PATH" ]; then
@@ -65,7 +65,7 @@ if [ ! -f "$DATASET_PATH" ]; then
 fi
 
 ##########################################
-# STEP: 运行 evaluation
+# STEP: Run evaluation
 ##########################################
 echo "========================================="
 echo "🚀 Running evaluation..."
@@ -74,7 +74,7 @@ echo "========================================="
 # Define SCRIPT_DIR for relative paths
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# run_evaluation.sh 需要 dataset_file.jsonl（文件名，不是路径）
+# run_evaluation.sh requires dataset_file.jsonl (filename, not path)
 DATASET_FILE_BASENAME="${BASE_NAME}_dataset.jsonl"
 
 echo -e "\n${CYAN}Step 3: Running Evaluation...${NC}"
@@ -82,7 +82,7 @@ echo -e "\n${CYAN}Step 3: Running Evaluation...${NC}"
 
 
 ##########################################
-# 最终输出
+# Final output
 ##########################################
 echo "========================================="
 echo "🎉 All tasks completed successfully!"

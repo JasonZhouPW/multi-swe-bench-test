@@ -46,10 +46,10 @@ map_language() {
     esac
 }
 
-# 将名称 sanitize 成合法的 package/dir 名（主要用于 python 导入 & 文件夹安全）
-# - 把非字母数字和下划线替换成下划线
-# - 转小写（Python 包名通常小写）
-# - 若以数字开头，前面加下划线
+# Sanitize the name into a valid package/dir name (mainly for Python imports & folder safety)
+# - Replace non-alphanumeric and non-underscore characters with underscores
+# - Convert to lowercase (Python package names are usually lowercase)
+# - If it starts with a digit, prefix an underscore
 sanitize_name() {
     local name="$1"
     # replace non-alnum/_ with _
@@ -63,7 +63,7 @@ sanitize_name() {
     echo "$name"
 }
 
-# 确保目录与 __init__.py（若为 python 包）存在
+# Ensure directory and __init__.py (if it's a Python package) exist
 ensure_package_dirs() {
     local path="$1"
     # create full path
@@ -86,7 +86,7 @@ echo "📘 Processing raw dataset: $RAW_FILE"
 echo ""
 
 while IFS= read -r line || [ -n "$line" ]; do
-    # 从 raw_dataset 的嵌套结构提取 org 和 language
+    # Extract org and language from the nested structure of raw_dataset
     ORG_RAW=$(echo "$line" | jq -r '.org')
     REPO_RAW=$(echo "$line" | jq -r '.base.repo.name')
     LANG_RAW=$(echo "$line" | jq -r '.base.repo.language')
@@ -101,7 +101,7 @@ while IFS= read -r line || [ -n "$line" ]; do
         continue
     fi
 
-    # 映射语言
+    # Map language
     LANG=$(map_language "$LANG_RAW")
 
     if [ "$LANG" == "unknown" ]; then
@@ -109,7 +109,7 @@ while IFS= read -r line || [ -n "$line" ]; do
         continue
     fi
 
-    # 对 org/repo 做安全化处理（用于目录与 import 路径）
+    # Sanitize org/repo (for directory and import paths)
     ORG=$(sanitize_name "$ORG_RAW")
     REPO=$(sanitize_name "$REPO_RAW")
 
@@ -119,18 +119,18 @@ while IFS= read -r line || [ -n "$line" ]; do
     INIT_FILE="${ORG_DIR}/__init__.py"
 
     echo "📂 Creating directory: $REPO_DIR"
-    # 如果是 python，我们会在所有层级创建 __init__.py；对其他语言也创建目录（但不会强制 __init__ 创建）
+    # For Python, we'll create __init__.py at all levels; for other languages, we'll create directories (but won't force __init__.py creation)
     mkdir -p "$REPO_DIR"
-    # 如果是 python，确保每一层都是包
+    # For Python, ensure every level is a package
     if [ "$LANG" == "python" ]; then
         ensure_package_dirs "$BASE_DIR/$ORG"
         ensure_package_dirs "$REPO_DIR"
     else
-        # 为保持一致也创建 org 的 __init__.py（可选）
+        # Also create org's __init__.py for consistency (optional)
         touch "$INIT_FILE" 2>/dev/null || true
     fi
 
-    # 构造 import line（使用已 sanitize 的名称，保证有效）
+    # Construct import line (using sanitized names to guarantee validity)
     IMPORT_LINE="from multi_swe_bench.harness.repos.${LANG}.${ORG}.${REPO} import *"
 
     touch "$INIT_FILE"

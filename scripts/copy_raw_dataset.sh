@@ -1,30 +1,30 @@
 #!/bin/bash
 
-# 查询文件夹下（包含子文件夹）的所有*_raw_dataset.jsonl文件
-# 如果文件大小>0,则将文件拷贝到目标文件夹
+# Find all *_raw_dataset.jsonl files in the directory (including subdirectories)
+# If the file size is > 0, copy it to the target directory
 
-# 用法: ./copy_raw_dataset.sh <源目录> <目标目录>
+# Usage: ./copy_raw_dataset.sh <source_dir> <target_dir>
 
 if [ $# -lt 2 ]; then
-    echo "用法: $0 <源目录> <目标目录>"
+    echo "Usage: $0 <source_dir> <target_dir>"
     exit 1
 fi
 
 SOURCE_DIR="$1"
 TARGET_DIR="$2"
 
-# 检查源目录是否存在
+# Check if source directory exists
 if [ ! -d "$SOURCE_DIR" ]; then
-    echo "错误: 源目录 '$SOURCE_DIR' 不存在"
+    echo "Error: Source directory '$SOURCE_DIR' does not exist"
     exit 1
 fi
 
-# 如果目标目录不存在，创建它
+# If target directory doesn't exist, create it
 if [ ! -d "$TARGET_DIR" ]; then
     mkdir -p "$TARGET_DIR"
 fi
 
-# 查找所有 *_raw_dataset.jsonl 文件，检查大小>0后拷贝到目标文件夹
+# Find all *_raw_dataset.jsonl files, check size > 0, then copy to target folder
 find "$SOURCE_DIR" -name "*_raw_dataset.jsonl" -type f -size +0 -exec cp {} "$TARGET_DIR/" \;
 
-echo "完成! 已将非空的 *_raw_dataset.jsonl 文件拷贝到 $TARGET_DIR"
+echo "Finished! Non-empty *_raw_dataset.jsonl files copied to $TARGET_DIR"

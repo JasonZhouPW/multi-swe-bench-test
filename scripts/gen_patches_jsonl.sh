@@ -9,7 +9,7 @@ fi
 PATCH_DIR="$1"
 OUTPUT="$2"
 
-# 清空旧文件
+# Clear existing file
 # mkdir -p "$(dirname "$OUTPUT")"
 > "$OUTPUT"
 

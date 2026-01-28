@@ -3,10 +3,10 @@ set -euo pipefail
 
 RAW_FILE="${1:?usage: $0 <file_raw_dataset.jsonl>}"
 
-# 生成输出文件名：把 _raw_dataset.jsonl 改成 _extracted_ds.jsonl
+# Generate output filename: change _raw_dataset.jsonl to _extracted_ds.jsonl
 OUT_FILE="${RAW_FILE%_raw_dataset.jsonl}_extracted_ds.jsonl"
 
-# 清空输出
+# Clear output
 >"$OUT_FILE"
 
 if command -v jq >/dev/null 2>&1; then

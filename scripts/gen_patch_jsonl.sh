@@ -20,7 +20,7 @@ if [ ! -f "$PATCH_FILE" ]; then
 fi
 
 #############################################
-# 推导输出文件名
+# Derive output filename
 #############################################
 BASENAME=$(basename "$PATCH_FILE" .patch)
 OUTPUT_FILE="${BASENAME}_patch.jsonl"
@@ -28,7 +28,7 @@ OUTPUT_FILE="${BASENAME}_patch.jsonl"
 echo "📄 Output file: $OUTPUT_FILE"
 
 #############################################
-# 读取 raw_dataset 的第一行字段
+# Read the first line's fields from the raw dataset
 #############################################
 FIRST_LINE=$(head -n 1 "$RAW_DATASET")
 
@@ -37,12 +37,12 @@ REPO=$(echo "$FIRST_LINE" | jq -r '.repo')
 NUMBER=$(echo "$FIRST_LINE" | jq -r '.number')
 
 #############################################
-# 读取 PATCH 全部内容（保留换行符）
+# Read the entire patch content (preserving newlines)
 #############################################
 PATCH_CONTENT=$(sed 's/\\/\\\\/g; s/"/\\"/g' "$PATCH_FILE" | awk '{print}' ORS='\\n')
 
 #############################################
-# 写入 JSONL
+# Write to JSONL
 #############################################
 cat > "$OUTPUT_FILE" << EOF
 {"org":"$ORG","repo":"$REPO","number":$NUMBER,"fix_patch":"$PATCH_CONTENT"}

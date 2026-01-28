@@ -1,12 +1,12 @@
 #!/bin/bash
 
-# 确保输入参数
+# Ensure input arguments
 # if [ "$#" -ne 4 ]; then
 #   echo "Usage: $0 <org> <repo> <instance_id> <language>"
 #   exit 1
 # fi
 
-# 获取输入参数
+# Get input arguments
 ORG=$1
 REPO=$2
 INSTANCE_ID=$3
@@ -20,10 +20,10 @@ else
   echo "No commit hash provided, fetching from GitHub API..."
   API_URL="https://api.github.com/repos/$ORG/$REPO/branches/main"
   echo "Fetching commit hash from: $API_URL"
-  # 使用 curl 获取 main 分支的最新 commit hash
+  # Use curl to fetch the latest commit hash of the main branch
   COMMIT_HASH=$(curl -s "$API_URL" | jq -r .commit.sha)
 
-  # 如果没有找到 commit hash，则输出错误信息并退出
+  # If commit hash not found, output error message and exit
   if [ "$COMMIT_HASH" == "null" ]; then
     echo "Error: Unable to fetch commit hash. Please check the repository and branch."
     API_URL="https://api.github.com/repos/$ORG/$REPO/branches/master"
@@ -39,13 +39,13 @@ fi
 
 
 
-# 获取当前时间
+# Get current time
 CURRENT_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-# 创建 dataset.jsonl 文件并写入
+# Create dataset.jsonl file and write to it
 echo "{\"repo\":\"$ORG/$REPO\",\"instance_id\":\"$INSTANCE_ID\",\"base_commit\":\"$COMMIT_HASH\",\"create_at\":\"$CURRENT_TIME\",\"language\":\"$LANGUAGE\"}" > dataset.jsonl
 
-# 输出生成的 jsonl 文件内容
+# Output the generated jsonl file content
 cat dataset.jsonl
 
 # check repolaunch folder exists
@@ -64,7 +64,7 @@ fi
 cd RepoLaunch
 python -m pip install -e .
 
-# 运行 repolaunch
+# Run repolaunch
 echo "Running RepoLaunch..."
 echo "set environment variable..."
 # check if OPENAI_API_KEY and OPENAI_BASE_URL are set

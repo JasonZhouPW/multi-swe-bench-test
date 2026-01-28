@@ -10,7 +10,7 @@ PROJ_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 export PYTHONPATH="$PROJ_ROOT${PYTHONPATH:+:$PYTHONPATH}"
 
 ##########################################
-# 参数校验
+# Argument validation
 ##########################################
 if [ $# -ne 1 ]; then
     echo "Usage: $0 <dataset_file.jsonl>"
@@ -27,7 +27,7 @@ if [ ! -f "$DATASET_PATH" ]; then
 fi
 
 ##########################################
-# 自动推导 patch 文件：<base>_patch.jsonl
+# Automatically derive patch file: <base>_patch.jsonl
 ##########################################
 BASE_NAME="${DATASET_FILE%%_dataset.jsonl}"
 PATCH_FILE="${BASE_NAME}_patch.jsonl"
@@ -39,12 +39,12 @@ if [ ! -f "$PATCH_PATH" ]; then
 fi
 
 ##########################################
-# ev_config 文件名
+# ev_config filename
 ##########################################
 EV_CONFIG="ev_config_${BASE_NAME}.json"
 
 ##########################################
-# 生成 ev_config JSON
+# Generate ev_config JSON
 ##########################################
 echo "📄 Generating evaluation config: $EV_CONFIG"
 
@@ -76,28 +76,28 @@ cat > "$EV_CONFIG" << EOF
 EOF
 
 ##########################################
-# 解析数据集文件名 -> 生成输出文件名
+# Parse dataset filename -> Generate output filename
 ##########################################
 ##########################################
-# 解析数据集文件名 -> 生成标准项目名
+# Parse dataset filename -> Generate standard project name
 ##########################################
 DATASET_PATH="$1"
 BASENAME=$(basename "$DATASET_PATH")    # 例如 mark3labs__mcp-go_dataset.jsonl
 
-# 1. 去掉 .jsonl
+# 1. Remove .jsonl
 NAME_NO_SUFFIX="${BASENAME%.jsonl}"     # mark3labs__mcp-go_dataset
 
-# 2. 去掉最后的 "_dataset" 或 "_raw_dataset"（如果有）
+# 2. Remove trailing "_dataset" or "_raw_dataset" (if present)
 PROJECT_NAME="${NAME_NO_SUFFIX%_dataset}"
 PROJECT_NAME="${PROJECT_NAME%_raw_dataset}"
 
 OUTPUT_FILENAME="${PROJECT_NAME}_final_report.json"
-# 输出目录
+# Output directory
 REPORT_DIR="$PROJ_ROOT/data/final_output/${PROJECT_NAME}"
 mkdir -p "$REPORT_DIR"
 
 ##########################################
-# 执行 Evaluation
+# Execute Evaluation
 ##########################################
 echo "🚀 Running evaluation..."
 python -m multi_swe_bench.harness.run_evaluation \
@@ -105,7 +105,7 @@ python -m multi_swe_bench.harness.run_evaluation \
     --output_dir "$REPORT_DIR"
 
 ##########################################
-# 重命名默认 final_report.json -> 项目名版本
+# Rename default final_report.json -> project name version
 ##########################################
 DEFAULT_REPORT="${REPORT_DIR}/final_report.json"
 TARGET_REPORT="${REPORT_DIR}/${OUTPUT_FILENAME}"
@@ -115,7 +115,7 @@ if [ -f "$DEFAULT_REPORT" ]; then
 fi
 
 ##########################################
-# 输出结果
+# Output results
 ##########################################
 echo "========================================="
 echo "✅ Evaluation completed!"

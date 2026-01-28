@@ -26,8 +26,9 @@ echo ""
 show_menu() {
     echo -e "Please select an option:"
     echo -e "1) ${GREEN}Fetch PRs from GitHub${NC} (GraphQL API)"
-    echo -e "2) ${GREEN}Build Dataset by PRs${NC} (Environment Setup)"
-    echo -e "3) ${GREEN}Extract Training Data${NC} (For Fine-tuning)"
+    echo -e "2) ${GREEN}Filter Raw Dataset${NC} (Filter records)"
+    echo -e "3) ${GREEN}Build Dataset by PRs${NC} (Environment Setup)"
+    echo -e "4) ${GREEN}Extract Training Data${NC} (For Fine-tuning)"
     echo -e "q) Exit"
     echo ""
 }
@@ -94,13 +95,58 @@ while true; do
             echo -e "\n${GREEN}Fetch and Copy complete.${NC}\n"
             ;;
         2)
-            echo -e "\n${YELLOW}--- Option 2: Build Dataset by PRs ---${NC}"
+            echo -e "\n${YELLOW}--- Option 2: Filter Raw Dataset ---${NC}"
+
             echo -e "Available raw datasets in data/raw_datasets/:"
-            find "$PROJ_ROOT/data/raw_datasets" -name "*_raw_dataset.jsonl" -printf "%P\n" | sort
+            ls "$PROJ_ROOT/data/raw_datasets"/*_raw_dataset.jsonl 2>/dev/null | xargs -n 1 basename | sort
+            echo ""
+            read -rp "Enter input directory (or enter 'list' to use data/raw_datasets/all_raw_datasets): " input_dir
+
+            if [ "$input_dir" = "list" ]; then
+                input_dir="$PROJ_ROOT/data/raw_datasets/all_raw_datasets"
+            else
+                if [ ! -d "$input_dir" ]; then
+                    echo -e "${RED}Error: Directory not found: $input_dir${NC}"
+                    continue
+                fi
+            fi
+
+            read -rp "Enter output directory name: " output_name
+            output_dir="$PROJ_ROOT/data/raw_datasets/$output_name"
+
+            mkdir -p "$output_dir"
+
+            echo -e "${CYAN}Please specify filter options:${NC}"
+            read -rp "Keywords (comma-separated, optional): " keywords
+            read -rp "Categories (comma-separated, optional): " categories
+            read -rp "Match mode (any/all, default: any): " match_mode
+            match_mode=${match_mode:-any}
+
+            CMD="bash \"$SCRIPTS_DIR/filter_raw_dataset.sh\" -i \"$input_dir\" -o \"$output_dir\""
+
+            if [ -n "$keywords" ]; then
+                CMD="$CMD -k \"$keywords\""
+            fi
+            if [ -n "$categories" ]; then
+                CMD="$CMD -c \"$categories\""
+            fi
+            if [ -n "$match_mode" ] && [ "$match_mode" != "any" ]; then
+                CMD="$CMD -m \"$match_mode\""
+            fi
+
+            echo -e "${CYAN}Executing: $CMD${NC}"
+            eval "$CMD"
+
+            echo -e "\n${GREEN}Filter complete. Results saved to: $output_dir${NC}\n"
+            ;;
+        3)
+            echo -e "\n${YELLOW}--- Option 3: Build Dataset by PRs ---${NC}"
+            echo -e "Available raw datasets in data/raw_datasets/:"
+            ls "$PROJ_ROOT/data/raw_datasets"/*_raw_dataset.jsonl 2>/dev/null | xargs -n 1 basename | sort
             echo ""
             read -rp "Enter relative path to raw dataset (or directory): " ds_path
             
-            full_ds_path="$PROJ_ROOT/data/raw_datasets/$ds_path"
+            full_ds_path="$PROJ_ROOT/$ds_path"
             if [ ! -e "$full_ds_path" ] && [ -e "$PROJ_ROOT/$ds_path" ]; then
                 full_ds_path="$PROJ_ROOT/$ds_path"
             fi
@@ -109,8 +155,8 @@ while true; do
             bash "$SCRIPTS_DIR/unify_repo_scripts.sh" "$full_ds_path"
             echo -e "\n${GREEN}Build complete.${NC}\n"
             ;;
-        3)
-            echo -e "\n${YELLOW}--- Option 3: Extract Training Data ---${NC}"
+        4)
+            echo -e "\n${YELLOW}--- Option 4: Extract Training Data ---${NC}"
             read -rp "Input path (file or dir): " input_path
             read -rp "Output file name (e.g., my_training_data.json): " output_file
             

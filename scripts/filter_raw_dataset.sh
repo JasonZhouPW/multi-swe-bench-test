@@ -39,7 +39,7 @@ function show_usage() {
     exit 1
 }
 
-# 默认值
+# Default values
 INPUT_DIR=""
 OUTPUT_DIR=""
 KEYWORDS=""
@@ -48,7 +48,7 @@ MATCH_MODE="any"
 CASE_SENSITIVE=false
 MIN_PATCH_SIZE=0
 
-# 解析命令行参数
+# Parse command line parameters
 while [[ $# -gt 0 ]]; do
     case $1 in
         -i|--input-dir)
@@ -104,11 +104,11 @@ fi
 if [[ -z "$KEYWORDS" && -z "$CATEGORIES" ]]; then
     echo "============================================"
     echo "No filter conditions detected, please select a preset category:"
-    echo "1. New Feature (新功能)"
-    echo "2. Bug Fix (Bug修复)"
-    echo "3. Edge Case & Robustness (边界情况与健壮性)"
-    echo "4. Performance Improvements (性能优化)"
-    echo "5. Refactor (代码重构)"
+    echo "1. New Feature"
+    echo "2. Bug Fix"
+    echo "3. Edge Case & Robustness"
+    echo "4. Performance Improvements"
+    echo "5. Refactor"
     echo "6. Exit"
     echo "============================================"
 
@@ -116,7 +116,7 @@ if [[ -z "$KEYWORDS" && -z "$CATEGORIES" ]]; then
     while [[ ! "$choice" =~ ^[1-6]$ ]]; do
         read -p "Please enter option [1-6]: " choice
     done
-    
+
     case $choice in
         1) CATEGORIES="new feature";;
         2) CATEGORIES="fix bug";;
@@ -125,7 +125,7 @@ if [[ -z "$KEYWORDS" && -z "$CATEGORIES" ]]; then
         5) CATEGORIES="refactor";;
         6) exit 0;;
     esac
-    
+
     echo ""
     read -p "Do you need additional keyword filtering? (press Enter to skip): " input_kw
     if [[ -n "$input_kw" ]]; then
@@ -146,7 +146,7 @@ mkdir -p "$OUTPUT_DIR"
 # ============================================================================
 calculate_code_patch_size() {
     local patch="$1"
-    
+
     # Use awk to parse diff and exclude documentation files. Logic from filter_large_patches.sh
     echo "$patch" | awk '
     BEGIN {
@@ -161,13 +161,13 @@ calculate_code_patch_size() {
         split($0, parts, " ")
         filepath = parts[3]
         sub(/^a\//, "", filepath)
-        
+
         is_doc = 0
         for (ext in doc_map) { if (filepath ~ ext "$") { is_doc = 1; break } }
         if (tolower(filepath) ~ /readme|changelog|contributing|license|notice|authors|\.gitignore|\.dockerignore/) {
             is_doc = 1
         }
-        
+
         if (in_doc == 0 && hunk_size > 0) total += hunk_size
         in_doc = is_doc
         hunk_size = 0
@@ -193,27 +193,27 @@ USE_PRESET_MODE=false
 
 handle_special_presets() {
     local categories_lower=$(echo "$CATEGORIES" | tr '[:upper:]' '[:lower:]')
-    
-    # 检查是否包含 "new feature" 或 "new-feature" 或 "newfeature"
+
+    # Check if contains "new feature" or "new-feature" or "newfeature"
     if [[ "$categories_lower" == *"new feature"* ]] || \
        [[ "$categories_lower" == *"new-feature"* ]] || \
        [[ "$categories_lower" == *"newfeature"* ]]; then
-        
+
         echo "============================================"
-        echo "检测到 'new feature' 预设，自动启用组合过滤模式"
+        echo "Detected 'new feature' preset, enabling combined filter mode"
         echo "============================================"
-        
+
         USE_PRESET_MODE=true
-        
-        # 设置新功能相关的关键字 (在 title 和 body 中搜索)
+
+        # Set new feature related keywords (search in title and body)
         local new_feature_keywords="add,implement,introduce,support,feature,enable"
         if [[ -z "$KEYWORDS" ]]; then
             KEYWORDS="$new_feature_keywords"
         else
             KEYWORDS="$KEYWORDS,$new_feature_keywords"
         fi
-        
-        # 设置新功能相关的 labels
+
+        # Set new feature related labels
         CATEGORIES=$(echo "$CATEGORIES" | sed -E 's/new[- ]?feature,?//gi' | sed 's/,$//' | sed 's/^,//')
         local new_feature_labels="enhancement,feature"
         if [[ -z "$CATEGORIES" ]]; then
@@ -221,35 +221,35 @@ handle_special_presets() {
         else
             CATEGORIES="$CATEGORIES,$new_feature_labels"
         fi
-        
+
         echo "Extended keywords: $KEYWORDS (match any one)"
         echo "Extended Categories: $CATEGORIES (match any one)"
         echo "Combination mode: Keyword match AND Label match"
         echo "============================================"
     fi
-    
-    # 检查是否包含 "fix bug" 或 "fix-bug" 或 "fixbug" 或 "bugfix"
+
+    # Check if contains "fix bug" or "fix-bug" or "fixbug" or "bugfix"
     if [[ "$categories_lower" == *"fix bug"* ]] || \
        [[ "$categories_lower" == *"fix-bug"* ]] || \
        [[ "$categories_lower" == *"fixbug"* ]] || \
        [[ "$categories_lower" == *"bugfix"* ]] || \
        [[ "$categories_lower" == *"bug fix"* ]]; then
-        
+
         echo "============================================"
-        echo "检测到 'fix bug' 预设，自动启用组合过滤模式"
+        echo "Detected 'fix bug' preset, enabling combined filter mode"
         echo "============================================"
-        
+
         USE_PRESET_MODE=true
-        
-        # 设置修复bug相关的关键字 (在 title 和 body 中搜索)
+
+        # Set fix bug related keywords (search in title and body)
         local fix_bug_keywords="fix,fixed,fixes,fixing,resolve,resolved,resolves,patch,repair,correct,bug,issue,error,problem"
         if [[ -z "$KEYWORDS" ]]; then
             KEYWORDS="$fix_bug_keywords"
         else
             KEYWORDS="$KEYWORDS,$fix_bug_keywords"
         fi
-        
-        # 设置修复bug相关的 labels
+
+        # Set fix bug related labels
         CATEGORIES=$(echo "$CATEGORIES" | sed -E 's/(fix[- ]?bug|bug[- ]?fix),?//gi' | sed 's/,$//' | sed 's/^,//')
         local fix_bug_labels="bug,bugfix,fix,hotfix,patch"
         if [[ -z "$CATEGORIES" ]]; then
@@ -257,14 +257,14 @@ handle_special_presets() {
         else
             CATEGORIES="$CATEGORIES,$fix_bug_labels"
         fi
-        
+
         echo "Extended keywords: $KEYWORDS (match any one)"
         echo "Extended Categories: $CATEGORIES (match any one)"
         echo "Combination mode: Keyword match AND Label match"
         echo "============================================"
     fi
-    
-    # 检查是否包含 "edge case & robustness" 或其变体
+
+    # Check if contains "edge case & robustness" or its variants
     if [[ "$categories_lower" == *"edge case"* ]] || \
        [[ "$categories_lower" == *"edge-case"* ]] || \
        [[ "$categories_lower" == *"edgecase"* ]] || \
@@ -272,56 +272,56 @@ handle_special_presets() {
        [[ "$categories_lower" == *"corner case"* ]] || \
        [[ "$categories_lower" == *"edge case & robustness"* ]] || \
        [[ "$categories_lower" == *"edge case and robustness"* ]]; then
-        
+
         echo "============================================"
-        echo "检测到 'edge case & robustness' 预设，自动启用组合过滤模式"
+        echo "Detected 'edge case & robustness' preset, enabling combined filter mode"
         echo "============================================"
-        
+
         USE_PRESET_MODE=true
-        
-        # 设置边界情况/健壮性相关的关键字 (在 title 和 body 中搜索)
+
+        # Set edge case/robustness related keywords (search in title and body)
         local edge_case_keywords="edge case,corner case,boundary,edge,corner,overflow,underflow,null,empty,invalid,unexpected,exception,handle,handling,validation,validate,check,guard,defensive,robust,robustness,fallback,graceful,safety,safe"
         if [[ -z "$KEYWORDS" ]]; then
             KEYWORDS="$edge_case_keywords"
         else
             KEYWORDS="$KEYWORDS,$edge_case_keywords"
         fi
-        
-        # 设置边界情况/健壮性相关的 labels
+
+        # Set edge case/robustness related labels
         CATEGORIES=$(echo "$CATEGORIES" | sed -E 's/(edge[- ]?case[- &]*robustness|edge[- ]?case[- ]*and[- ]*robustness|edge[- ]?case|robustness|corner[- ]?case),?//gi' | sed 's/,$//' | sed 's/^,//')
-        local edge_case_labels="edge-case,corner-case,robustness,validation,error-handling,bug,bugfix"
+        local edge_case_labels="edge-case,corner-case,robustness,validation,bug,bugfix"
         if [[ -z "$CATEGORIES" ]]; then
             CATEGORIES="$edge_case_labels"
         else
             CATEGORIES="$CATEGORIES,$edge_case_labels"
         fi
-        
+
         echo "Extended keywords: $KEYWORDS (match any one)"
         echo "Extended Categories: $CATEGORIES (match any one)"
         echo "Combination mode: Keyword match AND Label match"
         echo "============================================"
     fi
 
-    # 检查是否包含 "performance improvements" 或其变体
+    # Check if contains "performance improvements" or its variants
     if [[ "$categories_lower" == *"performance"* ]] || \
        [[ "$categories_lower" == *"optimization"* ]] || \
        [[ "$categories_lower" == *"improvement"* ]]; then
-        
+
         echo "============================================"
-        echo "检测到 'performance improvements' 预设，自动启用组合过滤模式"
+        echo "Detected 'performance improvements' preset, enabling combined filter mode"
         echo "============================================"
-        
+
         USE_PRESET_MODE=true
-        
-        # 设置性能优化相关的关键字 (在 title 和 body 中搜索)
+
+        # Set performance optimization related keywords (search in title and body)
         local perf_keywords="performance,performant,optimize,optimization,optimized,efficient,efficiency,speed,fast,faster,slow,latency,throughput,memory,leak,resource,scalability,scale,bottleneck"
         if [[ -z "$KEYWORDS" ]]; then
             KEYWORDS="$perf_keywords"
         else
             KEYWORDS="$KEYWORDS,$perf_keywords"
         fi
-        
-        # 设置性能优化相关的 labels
+
+        # Set performance optimization related labels
         CATEGORIES=$(echo "$CATEGORIES" | sed -E 's/(performance|optimization|improvement|efficiency),?//gi' | sed 's/,$//' | sed 's/^,//')
         local perf_labels="performance,optimization,enhancement,speed,memory,efficiency"
         if [[ -z "$CATEGORIES" ]]; then
@@ -329,41 +329,41 @@ handle_special_presets() {
         else
             CATEGORIES="$CATEGORIES,$perf_labels"
         fi
-        
+
         echo "Extended keywords: $KEYWORDS (match any one)"
         echo "Extended Categories: $CATEGORIES (match any one)"
         echo "Combination mode: Keyword match AND Label match"
         echo "============================================"
     fi
-    
-    # 检查是否包含 "refactor" 或其变体
+
+    # Check if contains "refactor" or its variants
     if [[ "$categories_lower" == *"refactor"* ]] || \
        [[ "$categories_lower" == *"cleanup"* ]] || \
        [[ "$categories_lower" == *"reorganize"* ]]; then
-        
+
         echo "============================================"
-        echo "检测到 'refactor' 预设，自动启用组合过滤模式"
+        echo "Detected 'refactor' preset, enabling combined filter mode"
         echo "============================================"
-        
+
         USE_PRESET_MODE=true
-        
-        # 设置重构相关的关键字 (在 title 和 body 中搜索)
+
+        # Set refactoring related keywords (search in title and body)
         local refactor_keywords="refactor,refactoring,refactored,clean,cleanup,reorganize,rename,restructure,simplify,simplification,extract,move,migrate,migration,polish,style"
         if [[ -z "$KEYWORDS" ]]; then
             KEYWORDS="$refactor_keywords"
         else
             KEYWORDS="$KEYWORDS,$refactor_keywords"
         fi
-        
-        # 设置重构相关的 labels
+
+        # Set refactoring related labels
         CATEGORIES=$(echo "$CATEGORIES" | sed -E 's/(refactor|cleanup|reorganize),?//gi' | sed 's/,$//' | sed 's/^,//')
-        local refactor_labels="refactor,cleanup,internal,internal-refactor,documentation,style"
+        local refactor_labels="refactor,cleanup,internal,internal-ref-reffactor,documentation,style"
         if [[ -z "$CATEGORIES" ]]; then
             CATEGORIES="$refactor_labels"
         else
             CATEGORIES="$CATEGORIES,$refactor_labels"
         fi
-        
+
         echo "Extended keywords: $KEYWORDS (match any one)"
         echo "Extended Categories: $CATEGORIES (match any one)"
         echo "Combination mode: Keyword match AND Label match"
@@ -371,53 +371,55 @@ handle_special_presets() {
     fi
 }
 
-# 调用特殊预设处理
+# Apply special preset handling
 handle_special_presets
 
 echo "============================================"
-echo "过滤 JSONL 文件"
+echo "Filtering JSONL files"
 echo "============================================"
-echo "输入目录: $INPUT_DIR"
-echo "输出目录: $OUTPUT_DIR"
-echo "关键字: ${KEYWORDS:-无}"
-echo "Categories: ${CATEGORIES:-无}"
-echo "匹配模式: $MATCH_MODE"
-echo "大小写敏感: $CASE_SENSITIVE"
+echo "Input directory: $INPUT_DIR"
+echo "Output directory: $OUTPUT_DIR"
+echo "Keywords: ${KEYWORDS:-none}"
+echo "Categories: ${CATEGORIES:-none}"
+echo "Match mode: $MATCH_MODE"
+echo "Case sensitive: $CASE_SENSITIVE"
 echo "============================================"
 
-# 构建 jq 过滤表达式
+# ============================================================================
+# Function: Build jq filter expression
+# ============================================================================
 build_jq_filter() {
     local keyword_filter=""
     local category_filter=""
-    
+
     # Determine keyword and label internal match mode
     # Preset mode: internal uses any, combination uses all
     # Normal mode: both use user-specified MATCH_MODE
     local internal_kw_mode="$MATCH_MODE"
     local internal_cat_mode="$MATCH_MODE"
     local combine_mode="$MATCH_MODE"
-    
+
     if [[ "$USE_PRESET_MODE" == "true" ]]; then
-        internal_kw_mode="any"   # 关键字之间用 or
-        internal_cat_mode="any"  # label 之间用 or
-        combine_mode="all"       # 关键字和label之间用 and
+        internal_kw_mode="any"   # Keywords use or
+        internal_cat_mode="any"  # Labels use or
+        combine_mode="all"       # Keywords and labels use and
     fi
-    
-    # 构建关键字过滤条件
+
+    # Build keyword filter conditions
     if [[ -n "$KEYWORDS" ]]; then
         IFS=',' read -ra KW_ARRAY <<< "$KEYWORDS"
         local kw_conditions=()
         for kw in "${KW_ARRAY[@]}"; do
-            # 去除首尾空格
+            # Remove leading/trailing whitespace
             kw=$(echo "$kw" | xargs)
             if [[ "$CASE_SENSITIVE" == "false" ]]; then
-                # 不区分大小写: 将字段和关键字都转为小写
+                # Case insensitive: convert fields and keywords to lowercase
                 kw_conditions+=("(((.title // \"\") | ascii_downcase | contains(\"$(echo "$kw" | tr '[:upper:]' '[:lower:]')\")) or ((.body // \"\") | ascii_downcase | contains(\"$(echo "$kw" | tr '[:upper:]' '[:lower:]')\")))")
             else
                 kw_conditions+=("(((.title // \"\") | contains(\"$kw\")) or ((.body // \"\") | contains(\"$kw\")))")
             fi
         done
-        
+
         if [[ "$internal_kw_mode" == "all" ]]; then
             keyword_filter=$(printf "%s" "${kw_conditions[0]}")
             for ((i=1; i<${#kw_conditions[@]}; i++)); do
@@ -430,21 +432,21 @@ build_jq_filter() {
             done
         fi
     fi
-    
-    # 构建 category/label 过滤条件
+
+    # Build category/label filter conditions
     if [[ -n "$CATEGORIES" ]]; then
         IFS=',' read -ra CAT_ARRAY <<< "$CATEGORIES"
         local cat_conditions=()
         for cat in "${CAT_ARRAY[@]}"; do
-            # 去除首尾空格
+            # Remove cat leading/trailing whitespace
             cat=$(echo "$cat" | xargs)
             if [[ "$CASE_SENSITIVE" == "false" ]]; then
-                cat_conditions+=("((.labels // []) | map(.name // \"\" | ascii_downcase) | any(. | contains(\"$(echo "$cat" | tr '[:upper:]' '[:lower:]')\")))")
+                cat_conditions+=("((.labels // []) | map((if type == \"object\" then .name else . end) // \"\" | ascii_downcase) | any(. | contains(\"$(echo "$cat" | tr '[:upper:]' '[:lower:]')\")))")
             else
-                cat_conditions+=("((.labels // []) | map(.name // \"\") | any(. | contains(\"$cat\")))")
+                cat_conditions+=("((.labels // []) | map((if type == \"object\" then .name else . end) // \"\") | any(. | contains(\"$cat\")))")
             fi
         done
-        
+
         if [[ "$internal_cat_mode" == "all" ]]; then
             category_filter=$(printf "%s" "${cat_conditions[0]}")
             for ((i=1; i<${#cat_conditions[@]}; i++)); do
@@ -457,8 +459,8 @@ build_jq_filter() {
             done
         fi
     fi
-    
-    # 合并过滤条件
+
+    # Combine filter conditions
     if [[ -n "$keyword_filter" && -n "$category_filter" ]]; then
         if [[ "$combine_mode" == "all" ]]; then
             echo "($keyword_filter) and ($category_filter)"
@@ -494,12 +496,12 @@ for jsonl_file in "$INPUT_DIR"/*_raw_dataset.jsonl; do
         echo "Warning: No *_raw_dataset.jsonl files found in $INPUT_DIR"
         break
     fi
-    
+
     ((total_files++)) || true
-    
+
     filename=$(basename "$jsonl_file")
     output_file="$OUTPUT_DIR/$filename"
-    
+
     echo "Processing: $filename"
 
     # Count input records

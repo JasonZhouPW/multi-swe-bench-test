@@ -10,7 +10,7 @@ PROJ_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 export PYTHONPATH="$PROJ_ROOT${PYTHONPATH:+:$PYTHONPATH}"
 
 ##########################################
-# 参数输入检查
+# Check input arguments
 ##########################################
 if [ $# -ne 1 ]; then
     echo "Usage: $0 <raw_dataset_file.jsonl>"
@@ -20,27 +20,27 @@ if [ $# -ne 1 ]; then
 fi
 
 ##########################################
-# 自动处理路径与文件名
+# Automatically handle paths and filenames
 ##########################################
 RAW_PATH="$1"
 
-# 如果传入的是相对路径，则保持相对；如果是文件名，则补默认路径
-if [ ! -f "$RAW_PATH" ]; then
-    # 尝试在默认目录查找
-    if [ -f "./data/raw_datasets/$RAW_PATH" ]; then
-        RAW_PATH="./data/raw_datasets/$RAW_PATH"
+    # If a relative path is passed, keep it; if only a filename, use default path
+    if [ ! -f "$RAW_PATH" ]; then
+        # Try finding it in the default directory
+        if [ -f "./data/raw_datasets/$RAW_PATH" ]; then
+            RAW_PATH="./data/raw_datasets/$RAW_PATH"
     else
         echo "❌ Error: Cannot find file: $RAW_PATH"
         exit 1
     fi
 fi
 
-# 解析出文件名和目录
+# Parse filename and directory
 RAW_FILE="$(basename "$RAW_PATH")"
 RAW_DIR="$(dirname "$RAW_PATH")"
 
 ##########################################
-# 自动推导变量
+# Automatically derive variables
 ##########################################
 BASE_NAME="${RAW_FILE%%_raw_dataset.jsonl}"
 
@@ -60,7 +60,7 @@ echo "📌 Input file: $RAW_PATH"
 echo ""
 
 ##########################################
-# 获取行数
+# Get line count
 ##########################################
 LINE_COUNT=$(wc -l < "$RAW_PATH" | tr -d ' ')
 echo "📌 Total records: $LINE_COUNT"
@@ -72,7 +72,7 @@ if [ "$LINE_COUNT" -eq 0 ]; then
 fi
 
 ##########################################
-# 遍历每条 JSONL
+# Iterate through each JSONL line
 ##########################################
 index=0
 while IFS= read -r LINE; do
@@ -85,12 +85,12 @@ while IFS= read -r LINE; do
     SINGLE_OUT="${OUTPUT_DIR}/${BASE_NAME}_${index}_dataset.jsonl"
 
     ##########################################
-    # 清洗 JSON：jq -c 使其成为合法单行 JSON
+    # Clean JSON: use jq -c to ensure valid single-line JSON
     ##########################################
     echo "$LINE" | jq -c '.' > "$TEMP_RAW_FILE"
 
     ##########################################
-    # 生成 config 文件
+    # Generate config file
     ##########################################
     cat > "$CONFIG_FILE" << EOF
 {
@@ -117,7 +117,7 @@ while IFS= read -r LINE; do
 EOF
 
     ##########################################
-    # 执行单条构建
+    # Execute single build
     ##########################################
     echo "🚀 Running dataset builder for record #$index..."
     python -m multi_swe_bench.harness.build_dataset --config "$CONFIG_FILE"
@@ -137,7 +137,7 @@ done < "$RAW_PATH"
 rm -rf "$TEMP_DIR"
 
 ##########################################
-# 总结输出
+# Summary output
 ##########################################
 echo "======================================="
 echo "🎉 Multi-record dataset build completed"

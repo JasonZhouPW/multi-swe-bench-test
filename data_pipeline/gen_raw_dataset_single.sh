@@ -1,20 +1,20 @@
 #!/bin/bash
-set -e  # 一旦有命令出错就退出
+set -e  # Exit on error
 
-# 参数配置（可通过命令行参数覆盖）
-# 默认值（如需更改，可使用 -o/-l/-s/-n/-t 参数）
+# Parameter configuration (overridable via CLI)
+# Default values (e.g., use -o/-l/-s/-n/-t to override)
 # OUTPUT_DIR="data/raw_datasets/catchorg__Catch6"
 LANGUAGE="Go"
 # MIN_STARS=100000
 # MAX_RESULTS=2
-TOKEN="./tokens.txt"  # 默认 token 文件路径，或直接填写 token 字符串，如 "ghp_xxx"
+TOKEN="./tokens.txt"  # Default token file path or token string
 # PERCENTAGE=70.0
-# 其他默认参数（通常无需修改）
+# Other default parameters (usually no need to modify)
 MAX_WORKERS=50
 DISTRIBUTE="round"
 DELAY_ON_ERROR=600
 RETRY_ATTEMPTS=8
-# 默认使用当前日期（YYYY-MM-DD）作为 CREATED_AT，可通过脚本修改或导出环境变量覆盖
+# Use today's date (YYYY-MM-DD) as default CREATED_AT, overridable via script or environment variables
 CREATED_AT="2025-01-01" # default value
 TODAY="$(date '+%Y-%m-%d')"
 
@@ -50,7 +50,7 @@ while getopts ":o:l:s:n:t:r:c:h" opt; do
 done
 shift $((OPTIND -1))
 
-# 显示当前配置
+# Display current configuration
 echo "Configuration:"
 echo "  OUTPUT_DIR = $OUTPUT_DIR"
 echo "  LANGUAGE   = $LANGUAGE"
@@ -58,7 +58,7 @@ echo "  LANGUAGE   = $LANGUAGE"
 # echo "  MAX_RESULTS= $MAX_RESULTS"
 echo "  REPOS = ${REPOS:-<none>}"
 
-# 如果未通过 -t 提供 token，尝试从常见环境变量读取
+# If token not provided via -t, try reading from common environment variables
 if [ "$TOKEN" = "xxxxx" ] || [ -z "$TOKEN" ]; then
     TOKEN="${GITHUB_TOKEN:-${GH_TOKEN:-${GITHUB_API_TOKEN:-}}}"
     if [ -z "$TOKEN" ]; then
@@ -69,22 +69,22 @@ if [ "$TOKEN" = "xxxxx" ] || [ -z "$TOKEN" ]; then
     fi
 fi
 
-# 如果 TOKEN 指向一个文件路径（如 ./tokens.txt），则读取文件中的非空行并转换为逗号分隔的字符串
+# If TOKEN points to a file (e.g., ./tokens.txt), read non-empty lines and convert to CSV string
 if [ -f "$TOKEN" ]; then
     echo "TOKEN is a file path, reading tokens from: $TOKEN"
-    # 读取非空行，去掉首尾空白，然后合并为以逗号分隔的字符串
+    # Read non-empty lines, trim whitespace, then merge into a comma-separated string
     TOKENS_CSV=$(awk 'NF{gsub(/^[ \t]+|[ \t]+$/, ""); print}' "$TOKEN" | paste -sd, -)
     if [ -z "$TOKENS_CSV" ]; then
         echo "❌ Error: Token file $TOKEN is empty or contains only whitespace." >&2
         exit 1
     fi
     TOKEN="$TOKENS_CSV"
-    # 可选：显示读取到的 token 个数（不打印具体 token 以免泄露）
+    # Optional: Display the number of tokens read (do not print specific tokens)
     TOKEN_COUNT=$(echo "$TOKEN" | awk -F',' '{print NF}')
     echo "Read $TOKEN_COUNT tokens from file."
 fi
 
-# 找到合适的 Python 解释器（要求 Python >= 3.10）
+# Find suitable Python interpreter (requires Python >= 3.10)
 PYTHON_CMD=""
 for cmd in python python3 python3.11 python3.10; do
     if command -v $cmd >/dev/null 2>&1; then
@@ -104,9 +104,9 @@ fi
 
 echo "Using interpreter: $PYTHON_CMD ($($PYTHON_CMD -V 2>&1))"
 
-# 第一步：爬取 GitHub 仓库
+# Step 1: Fetch GitHub repositories
 echo "Step 1: Crawl GitHub repos..."
-# splidt REPOS into array ,write to csv file $OUTPUT_DIR/filtered_repos.csv
+# Split REPOS into array, write to csv file $OUTPUT_DIR/filtered_repos.csv
 if [ -n "${REPOS:-}" ]; then
     echo "Processing specific repos: $REPOS"
     IFS=',' read -r -a REPO_ARRAY <<< "$REPOS"
@@ -132,7 +132,7 @@ fi
 
 echo "Filtered CSV file: $CSV_FILE"
 
-# 第二步：从仓库获取数据
+# Step 2: Get data from repositories
 # echo "Step 2: Get data from repos..."
 $PYTHON_CMD -m multi_swe_bench.collect.get_from_repos_pipeline \
     --csv_file "$CSV_FILE" \

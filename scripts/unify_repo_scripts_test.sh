@@ -100,7 +100,7 @@ for RAW_FILE in "${FILES[@]}"; do
 done
 
 ##########################################
-# Finally: 构建 dataset（支持多条记录）
+# Finally: Build dataset (supports multiple records)
 ##########################################
 # echo "========================================="
 # echo "🚀 Finally: Building dataset..."
@@ -116,7 +116,7 @@ done
 # "$SCRIPT_DIR/../data_pipeline/build_dataset.sh" "$RAW_FILE"
 
 # ##########################################
-# # 推导 dataset 文件名（多条合并在一个文件中）
+# Derive dataset filename (multiple records merged into one file)
 # ##########################################
 # DATASET_FILE="${BASE_NAME}_dataset.jsonl"
 # DATASET_PATH="./data/datasets/$DATASET_FILE"

@@ -14,7 +14,7 @@ if [ ! -f "$RAW_JSON" ]; then
 fi
 
 ##########################################
-# 从 raw dataset 读取 org / repo / language
+# Read org / repo / language from raw dataset
 ##########################################
 LINE=$(head -n 1 "$RAW_JSON")
 
@@ -40,13 +40,13 @@ echo "  REPO     = $REPO"
 echo "  LANGUAGE = $LANG"
 
 ##########################################
-# Python import 兼容包名格式转换
+# Package name format conversion for Python import compatibility
 ##########################################
 ORG_PY=$(echo "$ORG" | tr '-' '_' | tr 'A-Z' 'a-z')
 REPO_PY=$(echo "$REPO" | tr '-' '_' | tr '.' '_' | tr 'A-Z' 'a-z')
 
 ##########################################
-# 语言映射：raw → 目录名
+# Language mapping: raw → directory name
 ##########################################
 case "$LANG" in
     go|golang)
@@ -77,7 +77,7 @@ case "$LANG" in
 esac
 
 ##########################################
-# 创建目录结构 multi_swe_bench/harness/repos/<lang>/<org>
+# Create directory structure multi_swe_bench/harness/repos/<lang>/<org>
 ##########################################
 BASE_DIR="$PROJ_ROOT/multi_swe_bench/harness/repos/$LANG_DIR"
 ORG_DIR="$BASE_DIR/$ORG_PY"
@@ -85,7 +85,7 @@ ORG_DIR="$BASE_DIR/$ORG_PY"
 mkdir -p "$ORG_DIR"
 
 ##########################################
-# 修改对应语言的 __init__.py
+# Modify the corresponding language's __init__.py
 ##########################################
 INIT_FILE="$BASE_DIR/__init__.py"
 
@@ -97,7 +97,7 @@ fi
 IMPORT_LINE="from multi_swe_bench.harness.repos.${LANG_DIR}.${ORG_PY}.${REPO_PY} import *"
 
 ##########################################
-# 防止重复添加
+# Prevent duplicate additions
 ##########################################
 if grep -Fxq "$IMPORT_LINE" "$INIT_FILE"; then
     echo "ℹ️ Already exists in __init__.py"

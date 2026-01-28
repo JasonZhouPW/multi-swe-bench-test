@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ##########################################
-# 参数校验
+# Argument validation
 ##########################################
 if [ $# -ne 1 ]; then
     echo "Usage: $0 <dataset_file.jsonl>"
@@ -19,7 +19,7 @@ if [ ! -f "$DATASET_PATH" ]; then
 fi
 
 ##########################################
-# 自动推导 patch 文件：<base>_patch.jsonl
+# Automatically derive patch file: <base>_patch.jsonl
 ##########################################
 BASE_NAME="${DATASET_FILE%%_dataset.jsonl}"
 PATCH_FILE="${BASE_NAME}_patch.jsonl"
@@ -31,12 +31,12 @@ if [ ! -f "$PATCH_PATH" ]; then
 fi
 
 ##########################################
-# ev_config 文件名
+# ev_config filename
 ##########################################
 EV_CONFIG="ev_config_${BASE_NAME}.json"
 
 ##########################################
-# 生成 ev_config JSON
+# Generate ev_config JSON
 ##########################################
 echo "📄 Generating evaluation config: $EV_CONFIG"
 
@@ -68,13 +68,13 @@ cat > "$EV_CONFIG" << EOF
 EOF
 
 ##########################################
-# 执行 Evaluation
+# Execute Evaluation
 ##########################################
 echo "🚀 Running evaluation..."
 python -m multi_swe_bench.harness.run_evaluation --config "$EV_CONFIG"
 
 ##########################################
-# 输出结果
+# Output results
 ##########################################
 REPORT_DIR="./data/final_output"
 
