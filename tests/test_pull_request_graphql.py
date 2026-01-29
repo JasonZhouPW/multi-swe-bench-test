@@ -70,6 +70,11 @@ class TestPullRequestGraphQL(unittest.TestCase):
               headRef {
                 name
                 prefix
+                target {
+                  ... on Commit {
+                    oid
+                  }
+                }
               }
 
               repository {
@@ -182,8 +187,16 @@ class TestPullRequestGraphQL(unittest.TestCase):
         base_ref = pr.get("baseRef", {})
         base_target = base_ref.get("target", {})
         base_commit_hash = base_target.get("oid")
+
+        head_ref = pr.get("headRef", {})
+        head_target = head_ref.get("target", {})
+        head_commit_hash = head_target.get("oid")
+
         self.assertIsNotNone(base_commit_hash, "Base commit hash should be available")
         print(f"   Base commit hash: {base_commit_hash[:10]}...")
+
+        self.assertIsNotNone(head_commit_hash, "Head commit hash should be available")
+        print(f"   Head commit hash: {head_commit_hash[:10]}...")
 
         self.assertIsNotNone(pr.get("repository"))
 

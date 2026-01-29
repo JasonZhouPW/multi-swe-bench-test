@@ -18,13 +18,21 @@ import json
 import random
 import re
 import requests
-from datetime import datetime, timezone
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
 from multi_swe_bench.collect.util import get_tokens, make_request_with_retry
 from multi_swe_bench.collect.fetch_github_repo_gql import GitHubGraphQLClient
+
+# GitHub API配置
+GITHUB_API_BASE = "https://api.github.com"
+HEADERS = {
+    "Accept": "application/vnd.github+json",
+    "X-GitHub-Api-Version": "2022-11-28",
+}
+
 
 def extract_related_issues(pr_title: str, pr_body: str) -> Optional[List[int]]:
     issue_pattern = re.compile(r"#(\d+)")
@@ -211,6 +219,7 @@ def search_prs_with_graphql(
     client: GitHubGraphQLClient,
     org: str,
     repo: str,
+    token: str,
     merged_after: Optional[str] = None,
     merged_before: Optional[str] = None,
     key_words: Optional[str] = None,
@@ -273,6 +282,11 @@ def search_prs_with_graphql(
                   }
                   headRef {
                     name
+                    target {
+                      ... on Commit {
+                        oid
+                      }
+                    }
                   }
                 }
           }
@@ -348,14 +362,17 @@ def search_prs_with_graphql(
                         "closed_at": node.get("closedAt"),
                         "merged_at": node.get("mergedAt"),
                         "merge_commit_sha": merge_commit.get("oid"),
-                        "commits":[
+                        "commits": [
                             {
-                                "oid":merge_commit.get("oid",""),
-                                "message":merge_commit.get("message","")
+                                "oid": merge_commit.get("oid", ""),
+                                "message": merge_commit.get("message", ""),
                             }
                         ],
-                        "base_commit_hash": base_ref.get("target", {}).get("oid")
-                        if base_ref.get("target")
+                        # "base_commit_hash": base_ref.get("target", {}).get("oid")
+                        # if base_ref.get("target")
+                        # else None,
+                        "base_commit_hash": head_ref.get("target", {}).get("oid")
+                        if head_ref.get("target")
                         else None,
                         "head_ref_name": head_ref.get("name") if head_ref else None,
                         "related_issues": issue_refs,
@@ -378,6 +395,11 @@ def search_prs_with_graphql(
                     print(
                         f"Found PR: {pr_data['number']}, state: {pr_data['state']}, merged_at: {pr_data['merged_at']}, issues: {issue_refs}"
                     )
+                    if pr_data["base_commit_hash"] is None:
+                        ## call
+                        pr_data["base_commit_hash"] = get_correct_commit_hash(
+                            repo_full_name, pr_number, token
+                        )
                     prs.append(pr_data)
 
             if not page_info.get("hasNextPage", False):
@@ -391,6 +413,33 @@ def search_prs_with_graphql(
 
     print(f"Total PRs found in GraphQL search: {len(prs)}")
     return prs[:max_results]
+
+
+def get_correct_commit_hash(repo_path, pr_number, token):
+    """
+    通过GitHub API获取PR的正确commit hash
+    """
+    url = f"{GITHUB_API_BASE}/repos/{repo_path}/pulls/{pr_number}"
+
+    headers = HEADERS.copy()
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    response = requests.get(url, headers=headers)
+
+    # 处理速率限制
+    if response.status_code == 429:
+        reset_time = int(response.headers.get("X-RateLimit-Reset", time.time() + 60))
+        sleep_time = max(reset_time - int(time.time()), 0) + 1
+        print(f"Rate limited. Sleeping for {sleep_time} seconds...")
+        time.sleep(sleep_time)
+        return get_correct_commit_hash(repo_path, pr_number, token)  # 重试
+
+    # 处理其他HTTP错误
+    response.raise_for_status()
+
+    data = response.json()
+    return data["head"]["sha"]
 
 
 def is_relevant_pull(pull, key_words: Optional[str] = None) -> bool:
@@ -447,13 +496,13 @@ def main(
 
     print(f"Found {len(repositories)} repositories to process")
 
-    if tokens:
-        tk = random.choice(tokens)
-        print("Using token:", tk)
-        client = GitHubGraphQLClient(tk)
-    else:
-        print("No tokens available. Cannot use GraphQL API.")
-        return
+    # if tokens:
+    tk = random.choice(tokens)
+    print("Using token:", tk)
+    client = GitHubGraphQLClient(tk)
+    # else:
+    #     print("No tokens available. Cannot use GraphQL API.")
+    #     return
 
     total_prs = 0
     for org, repo in repositories:
@@ -463,6 +512,7 @@ def main(
             client,
             org,
             repo,
+            tk,
             merged_after,
             merged_before,
             key_words,
@@ -495,8 +545,9 @@ def main(
                 #         # "commits": commits_data,
                 #     }
                 # )
-                related_issues = extract_related_issues(pr_data["title"], pr_data["body"])
-
+                related_issues = extract_related_issues(
+                    pr_data["title"], pr_data["body"]
+                )
 
                 # pr_data["commits"] = commits_data
                 pr_data["resolved_issues"] = related_issues
