@@ -237,6 +237,55 @@ Execute the final benchmark evaluation:
 
 ---
 
+### 6. Additional Data Processing Utilities
+
+#### SWE-bench Oracle Dataset Generation
+Generate a comprehensive `dataset.jsonl` compatible with SWE-bench. This is a 2-step process:
+
+**Step 1: Compile Raw Data**
+Generate a consolidated dataset file from individual raw JSONL files.
+```bash
+./scripts/gen_swe_oracle_dataset.sh <input_directory> <output_file>
+
+# Example
+./scripts/gen_swe_oracle_dataset.sh ./data/raw_datasets swe_oracle_dataset.jsonl
+```
+
+**Step 2: Enrich with Oracle Text**
+Populate the `text` field with issue descriptions, PR bodies, and maintainer comments.
+```bash
+# Process a directory or specific file
+python scripts/generate_oracle_text.py --directory ./path/to/dataset_dir
+# OR
+python scripts/generate_oracle_text.py --file swe_oracle_dataset.jsonl
+```
+
+#### Fix Base Commit Hash (this is for fix old version of dataset, latest version is already fixed)
+Fix incorrect or missing `base_commit` hashes in JSONL files by fetching from GitHub API:
+```bash
+python scripts/fix_commithash.py <directory_containing_jsonl>
+
+# Example
+python scripts/fix_commithash.py ./data/raw_datasets
+```
+
+#### Patch Size Filtering
+Filter out instances where the code patch size (excluding docs) is smaller than a threshold:
+```bash
+./scripts/filter_large_patches.sh <input_dir> <output_file> [min_bytes]
+
+# Example
+./scripts/filter_large_patches.sh ./data/raw_datasets ./data/filtered/large_patches.jsonl 1024
+```
+
+#### Language Field Fix ， this is for fix old version of dataset, latest version is already fixed
+Add or fix the `language` field in JSONL datasets:
+```bash
+python scripts/add_language_field.py -d ./data/raw_datasets -l Python
+```
+
+---
+
 ## 🧭 Common Commands Summary
 
 | Task | Command | Description |
@@ -251,6 +300,11 @@ Execute the final benchmark evaluation:
 | **Run Patches** | `./scripts/run_patch.sh [Raw_Dataset]` | Generate repair patches |
 | **Evaluate** | `./scripts/run_full_pipeline.sh [Raw_Dataset]` | Full evaluation pipeline |
 | **Analyze Patches** | `./scripts/analyze_patch.sh [Semgrep_Output]` | Quality check on patches |
+| **Gen Oracle Text** | `python scripts/generate_oracle_text.py --directory [Dir]` | Add issue/PR context to data |
+| **Gen Oracle DS** | `./scripts/gen_swe_oracle_dataset.sh [In] [Out]` | Generate SWE-bench oracle dataset |
+| **Fix Commit Hash** | `python scripts/fix_commithash.py [Dir]` | Fix incorrect base commit hashes |
+| **Filter Patch Size** | `./scripts/filter_large_patches.sh [In] [Out] [Size]` | Filter by patch byte size |
+| **Fix Info** | `python scripts/add_language_field.py -d [Dir] -l [Lang]` | Add missing language field |
 | **Format Code** | `make format` | Format Python files |
 | **Lint Code** | `make lint` | Run ruff linter |
 | **Fix Linting** | `make fix` | Auto-fix linting issues |
