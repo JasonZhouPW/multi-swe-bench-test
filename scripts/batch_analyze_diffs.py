@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import argparse
 import csv
 import json
 import os
@@ -7,11 +8,16 @@ import re
 import sys
 from pathlib import Path
 
-DIFFS_DIR = "./extracted_diffs"
-SEMGREP_RESULTS_DIR = "./semgrep_diff_results"
-CSV_OUTPUT = "./patch_analysis_results.csv"
 
-os.makedirs(SEMGREP_RESULTS_DIR, exist_ok=True)
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Batch analyze diff files with semgrep"
+    )
+    parser.add_argument(
+        "diffs_dir",
+        help="Directory containing .diff files to analyze"
+    )
+    return parser.parse_args()
 
 
 def parse_diff_filename(filename):
@@ -44,16 +50,24 @@ def extract_score_from_analyze_output(output_text):
 
 
 def main():
-    diff_files = sorted(list(Path(DIFFS_DIR).glob("*.diff")))
+    args = parse_args()
+    
+    diffs_dir = args.diffs_dir
+    semgrep_results_dir = os.path.join(diffs_dir, "semgrep_results")
+    csv_output = os.path.join(diffs_dir, "semgrep_result.csv")
+    
+    os.makedirs(semgrep_results_dir, exist_ok=True)
+    
+    diff_files = sorted(list(Path(diffs_dir).glob("*.diff")))
 
     if not diff_files:
-        print(f"No diff files found in {DIFFS_DIR}")
+        print(f"No diff files found in {diffs_dir}")
         return 1
 
     print(f"Found {len(diff_files)} diff files to analyze...")
     print("Step 1: Running batch semgrep scan...")
 
-    batch_output = os.path.join(SEMGREP_RESULTS_DIR, "batch_all.json")
+    batch_output = os.path.join(semgrep_results_dir, "batch_all.json")
     result = subprocess.run(
         [
             "semgrep",
@@ -61,7 +75,7 @@ def main():
             "--config=auto",
             "--json",
             f"--output={batch_output}",
-            DIFFS_DIR,
+            diffs_dir,
         ],
         capture_output=True,
         text=True,
@@ -95,7 +109,7 @@ def main():
             continue
 
         semgrep_json = os.path.join(
-            SEMGREP_RESULTS_DIR, f"{org}_{repo}_{pr_number}.json"
+            semgrep_results_dir, f"{org}_{repo}_{pr_number}.json"
         )
         findings = results_by_file.get(str(diff_file), [])
 
@@ -142,7 +156,7 @@ def main():
 
     results.sort(key=lambda x: (x["org"], x["repo"], int(x["pr_number"])))
 
-    with open(CSV_OUTPUT, "w", newline="") as csvfile:
+    with open(csv_output, "w", newline="") as csvfile:
         fieldnames = ["org", "repo", "pr_number", "patch_file", "semgrep_score"]
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 
@@ -151,7 +165,7 @@ def main():
             writer.writerow(result)
 
     print(f"\nCompleted! Processed {len(results)} patches.")
-    print(f"Results saved to {CSV_OUTPUT}")
+    print(f"Results saved to {csv_output}")
 
     score_stats = {}
     for r in results:

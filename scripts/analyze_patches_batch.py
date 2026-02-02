@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import argparse
 import csv
 import json
 import os
@@ -7,14 +8,32 @@ import subprocess
 import sys
 from pathlib import Path
 
-DIFFS_DIR = "./test_patch"
-CSV_OUTPUT = "./patch_analysis_results.csv"
-SEMGREP_BATCH_OUTPUT = "./semgrep_batch_results.json"
 
-diff_files = sorted(list(Path(DIFFS_DIR).glob("*.diff")))
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Batch analyze diff files with semgrep"
+    )
+    parser.add_argument(
+        "diffs_dir",
+        help="Directory containing .diff files to analyze"
+    )
+    return parser.parse_args()
+
+
+args = parse_args()
+diffs_dir = args.diffs_dir
+
+# Create output paths as subdirectories under diffs_dir
+semgrep_results_dir = os.path.join(diffs_dir, "semgrep_results")
+os.makedirs(semgrep_results_dir, exist_ok=True)
+
+csv_output = os.path.join(diffs_dir, "semgrep_result.csv")
+semgrep_batch_output = os.path.join(semgrep_results_dir, "semgrep_batch_results.json")
+
+diff_files = sorted(list(Path(diffs_dir).glob("*.diff")))
 
 if not diff_files:
-    print(f"No diff files found in {DIFFS_DIR}")
+    print(f"No diff files found in {diffs_dir}")
     sys.exit(1)
 
 print(f"Found {len(diff_files)} diff files")
@@ -26,8 +45,8 @@ result = subprocess.run(
         "scan",
         "--config=auto",
         "--json",
-        f"--output={SEMGREP_BATCH_OUTPUT}",
-        DIFFS_DIR,
+        f"--output={semgrep_batch_output}",
+        diffs_dir,
     ],
     capture_output=True,
     text=True,
@@ -39,8 +58,8 @@ if result.returncode != 0:
 
 results_by_file = {}
 
-if os.path.exists(SEMGREP_BATCH_OUTPUT):
-    with open(SEMGREP_BATCH_OUTPUT, "r") as f:
+if os.path.exists(semgrep_batch_output):
+    with open(semgrep_batch_output, "r") as f:
         try:
             semgrep_data = json.load(f)
             for res in semgrep_data.get("results", []):
@@ -119,15 +138,26 @@ for diff_file in diff_files:
     filename = os.path.basename(diff_file).removesuffix(".diff")
     parts = filename.split("_")
 
-    if len(parts) < 4:
+    # Handle both formats:
+    # - 3 parts: org_repo_prnumber (e.g., alibaba_nacos_14025)
+    # - 4+ parts: org_repo_prnumber_basecommit (e.g., org_repo_123_abc123)
+    if len(parts) < 3:
         continue
 
-    base_commit = parts[-1]
-    pr_number = parts[-2]
-    repo_parts = parts[:-2]
-
-    org = repo_parts[0]
-    repo = "_".join(repo_parts[1:])
+    # Find the PR number (first numeric part from the end)
+    pr_number = None
+    pr_index = None
+    for i in range(len(parts) - 1, 0, -1):
+        if parts[i].isdigit():
+            pr_number = parts[i]
+            pr_index = i
+            break
+    
+    if pr_number is None or pr_index is None:
+        continue
+    
+    org = parts[0]
+    repo = "_".join(parts[1:pr_index])
 
     findings_dict = results_by_file.get(
         str(diff_file), {"ERROR": 0, "WARNING": 0, "INFO": 0, "details": []}
@@ -153,7 +183,7 @@ for diff_file in diff_files:
 
 results.sort(key=lambda x: (x["org"], x["repo"], int(x["pr_number"])))
 
-with open(CSV_OUTPUT, "w", newline="") as csvfile:
+with open(csv_output, "w", newline="") as csvfile:
     fieldnames = ["org", "repo", "pr_number", "patch_file", "semgrep_score", "comments"]
     writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 
@@ -162,7 +192,7 @@ with open(CSV_OUTPUT, "w", newline="") as csvfile:
         writer.writerow(result)
 
 print(f"CSV generated with {len(results)} entries")
-print(f"Output: {CSV_OUTPUT}")
+print(f"Output: {csv_output}")
 
 score_distribution = {}
 for r in results:
