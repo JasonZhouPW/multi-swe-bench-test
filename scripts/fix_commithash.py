@@ -47,11 +47,12 @@ def parse_instance_id(instance_id):
     return repo_path, pr_number
 
 
+
 def get_correct_commit_hash(repo_path, pr_number, token):
     """
     通过GitHub API获取PR的正确commit hash
     """
-    url = f"{GITHUB_API_BASE}/repos/{repo_path}/pulls/{pr_number}"
+    url = f"{GITHUB_API_BASE}/repos/{repo_path}/pulls/{pr_number}/commits"
 
     headers = HEADERS.copy()
     if token:
@@ -70,8 +71,8 @@ def get_correct_commit_hash(repo_path, pr_number, token):
     # 处理其他HTTP错误
     response.raise_for_status()
 
-    data = response.json()
-    return data["head"]["sha"]
+    commits = response.json()
+    return commits[0]["parents"][0]["sha"]
 
 
 def process_jsonl_file(file_path, token):

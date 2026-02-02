@@ -368,12 +368,12 @@ def search_prs_with_graphql(
                                 "message": merge_commit.get("message", ""),
                             }
                         ],
-                        # "base_commit_hash": base_ref.get("target", {}).get("oid")
-                        # if base_ref.get("target")
-                        # else None,
-                        "base_commit_hash": head_ref.get("target", {}).get("oid")
-                        if head_ref.get("target")
+                        "base_commit_hash": base_ref.get("target", {}).get("oid")
+                        if base_ref.get("target")
                         else None,
+                        # "base_commit_hash": head_ref.get("target", {}).get("oid")
+                        # if head_ref.get("target")
+                        # else None,
                         "head_ref_name": head_ref.get("name") if head_ref else None,
                         "related_issues": issue_refs,
                         "labels": [
@@ -419,7 +419,7 @@ def get_correct_commit_hash(repo_path, pr_number, token):
     """
     通过GitHub API获取PR的正确commit hash
     """
-    url = f"{GITHUB_API_BASE}/repos/{repo_path}/pulls/{pr_number}"
+    url = f"{GITHUB_API_BASE}/repos/{repo_path}/pulls/{pr_number}/commits"
 
     headers = HEADERS.copy()
     if token:
@@ -438,8 +438,8 @@ def get_correct_commit_hash(repo_path, pr_number, token):
     # 处理其他HTTP错误
     response.raise_for_status()
 
-    data = response.json()
-    return data["head"]["sha"]
+    commits = response.json()
+    return commits[0]["parents"][0]["sha"]
 
 
 def is_relevant_pull(pull, key_words: Optional[str] = None) -> bool:

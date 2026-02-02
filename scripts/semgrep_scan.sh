@@ -52,23 +52,10 @@ if [ ! -f "$PATCH_FILE" ]; then
     exit 1
 fi
 
-# 3. Extract files from patch and run semgrep
-echo -e "${YELLOW}Starting scan for files in ${PATCH_FILE}...${NC}"
+# 3. Run semgrep scan on the patch file itself
+echo -e "${YELLOW}Starting scan on ${PATCH_FILE}...${NC}"
 
-# Extract file paths from "+++ b/path/to/file" lines
-FILES=$(grep "^+++ b/" "$PATCH_FILE" | cut -c 7-)
-
-if [ -z "$FILES" ]; then
-    echo -e "${YELLOW}No files found in patch to scan.${NC}"
-    echo "[]" > "$OUTPUT_FILE"
-    exit 0
-fi
-
-echo -e "Files to scan:\n${FILES}"
-
-# Run semgrep scan
-# We use xargs to pass the file list to semgrep
-# Redirect output to the specified file
-echo "$FILES" | xargs semgrep scan --config auto --json --output "$OUTPUT_FILE"
+# Run semgrep scan on the patch file directly
+semgrep scan --config=security --json --output "$OUTPUT_FILE" "$PATCH_FILE"
 
 echo -e "${GREEN}Scan completed. Results saved to: ${OUTPUT_FILE}${NC}"

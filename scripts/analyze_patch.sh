@@ -67,7 +67,54 @@ echo "Final Score: $FINAL_SCORE / 100"
 echo "Patch Grade: $GRADE"
 echo "===================================================="
 
-# Summary Recommendation
+if [ "$ERRORS" -gt 0 ]; then
+    DETAILS="CRITICAL: $ERRORS error(s) found. Patch rejected."
+    jq -r '.results[]? | select(.extra.severity == "ERROR") | "\(.message // .extra.message // "Unknown")|\(.start.line // "-")"' "$INPUT_FILE" | head -5 | while IFS='|' read -r msg line; do
+        if [ -n "$msg" ]; then
+            if [ "$line" != "-" ] && [ -n "$line" ]; then
+                DETAILS="${DETAILS}; - ${msg} (line ${line})"
+            else
+                DETAILS="${DETAILS}; - ${msg}"
+            fi
+        fi
+        echo "$DETAILS"
+    done | tail -1 > /tmp/comments_$$.txt
+    COMMENTS=$(cat /tmp/comments_$$.txt)
+    rm -f /tmp/comments_$$.txt
+elif [ "$WARNINGS" -gt 0 ]; then
+    DEDUCTION=$((WARNINGS*2))
+    DETAILS="WARNING: $WARNINGS warning(s) found. (-$DEDUCTION)"
+    jq -r '.results[]? | select(.extra.severity == "WARNING") | "\(.message // .extra.message // "Unknown")|\(.start.line // "-")"' "$INPUT_FILE" | head -5 | while IFS='|' read -r msg line; do
+        if [ -n "$msg" ]; then
+            if [ "$line" != "-" ] && [ -n "$line" ]; then
+                DETAILS="${DETAILS}; - ${msg} (line ${line})"
+            else
+                DETAILS="${DETAILS}; - ${msg}"
+            fi
+        fi
+        echo "$DETAILS"
+    done | tail -1 > /tmp/comments_$$.txt
+    COMMENTS=$(cat /tmp/comments_$$.txt)
+    rm -f /tmp/comments_$$.txt
+elif [ "$INFOS" -gt 0 ]; then
+    DEDUCTION=$(echo "$INFOS * 0.5" | bc)
+    DETAILS="INFO: $INFOS info finding(s). (-$DEDUCTION)"
+    jq -r '.results[]? | select(.extra.severity == "INFO") | "\(.message // .extra.message // "Unknown")|\(.start.line // "-")"' "$INPUT_FILE" | head -3 | while IFS='|' read -r msg line; do
+        if [ -n "$msg" ]; then
+            if [ "$line" != "-" ] && [ -n "$line" ]; then
+                DETAILS="${DETAILS}; - ${msg} (line ${line})"
+            else
+                DETAILS="${DETAILS}; - ${msg}"
+            fi
+        fi
+        echo "$DETAILS"
+    done | tail -1 > /tmp/comments_$$.txt
+    COMMENTS=$(cat /tmp/comments_$$.txt)
+    rm -f /tmp/comments_$$.txt
+else
+    COMMENTS=""
+fi
+
 if [ "$ERRORS" -gt 0 ]; then
     echo "CRITICAL: $ERRORS errors found. Patch rejected."
 elif (( $(echo "$FINAL_SCORE < 60" | bc -l) )); then
@@ -75,3 +122,8 @@ elif (( $(echo "$FINAL_SCORE < 60" | bc -l) )); then
 else
     echo "SUCCESS: Quality check passed."
 fi
+
+echo ""
+echo "MACHINE_READABLE_OUTPUT:"
+echo "SCORE:$FINAL_SCORE"
+echo "COMMENTS:$COMMENTS"
