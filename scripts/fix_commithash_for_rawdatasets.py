@@ -111,8 +111,7 @@ def process_jsonl_file(file_path, token):
                     correct_hash = get_correct_commit_hash(org, repo, pr_number, token)
 
                     # 检查是否需要更新
-                    needs_update = (old_hash != correct_hash) or \
-                                   (base_sha != correct_hash)
+                    needs_update = (old_hash != correct_hash) 
 
                     if needs_update:
                         # 更新base_commit_hash字段
