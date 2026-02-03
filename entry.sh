@@ -113,7 +113,7 @@ while true; do
             fi
 
             read -rp "Enter output directory name: " output_name
-            output_dir="$PROJ_ROOT/data/raw_datasets/$output_name"
+            output_dir="$PROJ_ROOT/$output_name"
 
             mkdir -p "$output_dir"
 
@@ -122,6 +122,10 @@ while true; do
             read -rp "Categories (comma-separated, optional): " categories
             read -rp "Match mode (any/all, default: any): " match_mode
             match_mode=${match_mode:-any}
+            read -rp "Min fix patch size (bytes, default: 0): " min_patch_size
+            min_patch_size=${min_patch_size:-0}
+            read -rp "Min test patch size (bytes, default: 0): " min_test_patch_size
+            min_test_patch_size=${min_test_patch_size:-0}
 
             CMD="bash \"$SCRIPTS_DIR/filter_raw_dataset.sh\" -i \"$input_dir\" -o \"$output_dir\""
 
@@ -133,6 +137,12 @@ while true; do
             fi
             if [ -n "$match_mode" ] && [ "$match_mode" != "any" ]; then
                 CMD="$CMD -m \"$match_mode\""
+            fi
+            if [ "$min_patch_size" -gt 0 ]; then
+                CMD="$CMD -p \"$min_patch_size\""
+            fi
+            if [ "$min_test_patch_size" -gt 0 ]; then
+                CMD="$CMD -pt \"$min_test_patch_size\""
             fi
 
             echo -e "${CYAN}Executing: $CMD${NC}"

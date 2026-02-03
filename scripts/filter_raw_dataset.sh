@@ -24,6 +24,7 @@ function show_usage() {
     echo "  -m, --match-mode    Match mode: 'any' (default, match any) or 'all' (match all)"
     echo "  -s, --case-sensitive  Case sensitive (default is not case sensitive)"
     echo "  -p, --min-patch-size  Specify minimum patch size (unit: bytes, default 0 no limit)"
+    echo "  -pt, --min-test-patch-size Specify minimum test patch size (unit: bytes, default 0 no limit)"
     echo "  -h, --help          Show help information"
     echo ""
     echo "Examples:"
@@ -47,6 +48,7 @@ CATEGORIES=""
 MATCH_MODE="any"
 CASE_SENSITIVE=false
 MIN_PATCH_SIZE=0
+MIN_TEST_PATCH_SIZE=0
 
 # Parse command line parameters
 while [[ $# -gt 0 ]]; do
@@ -77,6 +79,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         -p|--min-patch-size)
             MIN_PATCH_SIZE="$2"
+            shift 2
+            ;;
+        -pt|--min-test-patch-size)
+            MIN_TEST_PATCH_SIZE="$2"
             shift 2
             ;;
         -h|--help)
@@ -383,6 +389,8 @@ echo "Keywords: ${KEYWORDS:-none}"
 echo "Categories: ${CATEGORIES:-none}"
 echo "Match mode: $MATCH_MODE"
 echo "Case sensitive: $CASE_SENSITIVE"
+echo "Min patch size: $MIN_PATCH_SIZE"
+echo "Min test patch size: $MIN_TEST_PATCH_SIZE"
 echo "============================================"
 
 # ============================================================================
@@ -517,16 +525,33 @@ for jsonl_file in "$INPUT_DIR"/*_raw_dataset.jsonl; do
 
         if [[ -n "$filtered_line" ]]; then
             # 2. If MIN_PATCH_SIZE limit exists, calculate patch size
+            pass_patch=true
             if [[ "$MIN_PATCH_SIZE" -gt 0 ]]; then
                 patch_content=$(echo "$filtered_line" | jq -r '.fix_patch // empty')
                 if [[ -n "$patch_content" ]]; then
                     code_patch_size=$(calculate_code_patch_size "$patch_content")
-                    if [[ "$code_patch_size" -gt "$MIN_PATCH_SIZE" ]]; then
-                        echo "$filtered_line" >> "$output_file"
+                    if [[ "$code_patch_size" -le "$MIN_PATCH_SIZE" ]]; then
+                        pass_patch=false
                     fi
+                else
+                    pass_patch=false
                 fi
-            else
-                # No patch size limit, write directly
+            fi
+
+            # 3. If MIN_TEST_PATCH_SIZE limit exists, calculate test patch size
+            if [[ "$pass_patch" == "true" && "$MIN_TEST_PATCH_SIZE" -gt 0 ]]; then
+                test_patch_content=$(echo "$filtered_line" | jq -r '.test_patch // empty')
+                if [[ -n "$test_patch_content" ]]; then
+                    test_code_patch_size=$(calculate_code_patch_size "$test_patch_content")
+                    if [[ "$test_code_patch_size" -le "$MIN_TEST_PATCH_SIZE" ]]; then
+                        pass_patch=false
+                    fi
+                else
+                    pass_patch=false
+                fi
+            fi
+
+            if [[ "$pass_patch" == "true" ]]; then
                 echo "$filtered_line" >> "$output_file"
             fi
         fi
