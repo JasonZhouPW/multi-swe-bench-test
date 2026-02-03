@@ -110,27 +110,30 @@ def process_jsonl_file(file_path, token):
                     lines.append(line)
                     continue
 
-                # 获取正确的commit hash
-                try:
-                    correct_hash = get_correct_commit_hash(repo_path, pr_number, token)
+                # 获取当前的base_commit值
+                old_hash = data.get("base_commit")
+                
+                # 只有当base_commit为null, None, 或空字符串时才获取正确的commit hash
+                if old_hash is None or old_hash == "" or old_hash == "null":
+                    try:
+                        correct_hash = get_correct_commit_hash(repo_path, pr_number, token)
 
-                    # 更新base_commit字段
-                    old_hash = data.get("base_commit", "")
-                    print(f"Processing {instance_id}: {old_hash} -> {correct_hash}")
-
-                    if old_hash != correct_hash:
+                        # 更新base_commit字段
+                        print(f"Processing {instance_id}: {old_hash} -> {correct_hash}")
                         data["base_commit"] = correct_hash
                         modified_count += 1
                         print(f"Updated {instance_id}: {old_hash} -> {correct_hash}")
-                    else:
-                        print(f"No change needed for {instance_id}")
 
-                    # 将更新后的数据写回
-                    lines.append(json.dumps(data, ensure_ascii=False) + "\n")
+                        # 将更新后的数据写回
+                        lines.append(json.dumps(data, ensure_ascii=False) + "\n")
 
-                except Exception as e:
-                    print(f"Error processing {instance_id}: {e}")
-                    lines.append(line)  # 保留原始行
+                    except Exception as e:
+                        print(f"Error processing {instance_id}: {e}")
+                        lines.append(line)  # 保留原始行
+                else:
+                    # base_commit已有有效值，保持原样
+                    print(f"Skipping {instance_id}: base_commit already has value '{old_hash}'")
+                    lines.append(line)
 
             except json.JSONDecodeError as e:
                 print(f"Error decoding JSON in line {line_num}: {e}")

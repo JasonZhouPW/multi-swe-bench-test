@@ -95,12 +95,12 @@ while true; do
             echo -e "\n${GREEN}Fetch and Copy complete.${NC}\n"
             ;;
         2)
-            echo -e "\n${YELLOW}--- Option 2: Filter Raw Dataset ---${NC}"
+            # echo -e "\n${YELLOW}--- Option 2: Filter Raw Dataset ---${NC}"
 
-            echo -e "Available raw datasets in data/raw_datasets/:"
-            ls "$PROJ_ROOT/data/raw_datasets"/*_raw_dataset.jsonl 2>/dev/null | xargs -n 1 basename | sort
-            echo ""
-            read -rp "Enter input directory (or enter 'list' to use data/raw_datasets/all_raw_datasets): " input_dir
+            # echo -e "Available raw datasets in data/raw_datasets/:"
+            # ls "$PROJ_ROOT/data/raw_datasets"/*_raw_dataset.jsonl 2>/dev/null | xargs -n 1 basename | sort
+            # echo ""
+            read -rp "Enter input directory : " input_dir
 
             if [ "$input_dir" = "list" ]; then
                 input_dir="$PROJ_ROOT/data/raw_datasets/all_raw_datasets"
@@ -141,9 +141,9 @@ while true; do
             ;;
         3)
             echo -e "\n${YELLOW}--- Option 3: Build Dataset by PRs ---${NC}"
-            echo -e "Available raw datasets in data/raw_datasets/:"
-            ls "$PROJ_ROOT/data/raw_datasets"/*_raw_dataset.jsonl 2>/dev/null | xargs -n 1 basename | sort
-            echo ""
+            # echo -e "Available raw datasets in data/raw_datasets/:"
+            # ls "$PROJ_ROOT/data/raw_datasets"/*_raw_dataset.jsonl 2>/dev/null | xargs -n 1 basename | sort
+            # echo ""
             read -rp "Enter relative path to raw dataset (or directory): " ds_path
             
             full_ds_path="$PROJ_ROOT/$ds_path"
