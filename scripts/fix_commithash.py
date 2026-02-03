@@ -21,11 +21,15 @@ HEADERS = {
 
 
 def load_github_token(token_file="./tokens.txt"):
-    """加载GitHub token"""
+    """加载GitHub token (随机选择一个)"""
     try:
+        import random
         with open(token_file, "r") as f:
-            token = f.read().strip()
-        return token
+            tokens = [line.strip() for line in f if line.strip()]
+        if not tokens:
+            print(f"No tokens found in {token_file}")
+            return None
+        return random.choice(tokens)
     except FileNotFoundError:
         print(f"Token file {token_file} not found")
         return None

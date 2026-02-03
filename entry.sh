@@ -29,6 +29,7 @@ show_menu() {
     echo -e "2) ${GREEN}Filter Raw Dataset${NC} (Filter records)"
     echo -e "3) ${GREEN}Build Dataset by PRs${NC} (Environment Setup)"
     echo -e "4) ${GREEN}Extract Training Data${NC} (For Fine-tuning)"
+    echo -e "5) ${GREEN}Fetch All Raw Datasets${NC} (All Languages)"
     echo -e "q) Exit"
     echo ""
 }
@@ -165,6 +166,50 @@ while true; do
             echo -e "${CYAN}Executing: ./scripts/extract_training_data.sh $input_path $full_output_path${NC}"
             bash "$SCRIPTS_DIR/extract_training_data.sh" "$input_path" "$full_output_path"
             echo -e "\n${GREEN}Extraction complete. Result saved to: $full_output_path${NC}\n"
+            ;;
+        5)
+            echo -e "\n${YELLOW}--- Option 5: Fetch All Raw Datasets (All Languages) ---${NC}"
+            
+            # Define languages array
+            LANGUAGES=("Go" "Java" "Python" "Rust" "JavaScript" "TypeScript" "C" "C++")
+            
+            read -rp "Output directory (required): " output_dir
+            if [ -z "$output_dir" ]; then
+                echo -e "${RED}Error: Output directory is required.${NC}"
+                continue
+            fi
+            
+            read -rp "Merged After (ISO format, e.g., 2025-01-01, required): " merged_after
+            if [ -z "$merged_after" ]; then
+                echo -e "${RED}Error: Merged After date is required.${NC}"
+                continue
+            fi
+            
+            mkdir -p "$output_dir"
+            
+            echo -e "\n${CYAN}Will fetch raw datasets for ${#LANGUAGES[@]} languages:${NC}"
+            printf '  - %s\n' "${LANGUAGES[@]}"
+            echo ""
+            
+            for lang in "${LANGUAGES[@]}"; do
+                lang_output_dir="$output_dir/$lang"
+                mkdir -p "$lang_output_dir"
+                
+                echo -e "\n${CYAN}[$lang] Fetching raw dataset...${NC}"
+                
+                CMD="bash \"$SCRIPTS_DIR/new_gen_raw_dataset_graphql.sh\" -l \"$lang\" -o \"$lang_output_dir\" -m \"$merged_after\""
+                echo -e "${CYAN}Executing: $CMD${NC}"
+                
+                if eval "$CMD"; then
+                    echo -e "${GREEN}[$lang] Completed successfully.${NC}"
+                else
+                    echo -e "${RED}[$lang] Failed. Continuing with next language...${NC}"
+                fi
+            done
+            
+            echo -e "\n${GREEN}Fetch all raw datasets complete.${NC}"
+            echo -e "Results saved to: $output_dir"
+            echo -e "Subdirectories: ${LANGUAGES[*]}\n"
             ;;
         q|Q)
             echo -e "${YELLOW}Exiting. Goodbye!${NC}"
