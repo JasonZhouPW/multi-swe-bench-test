@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-修复jsonl文件中的base_commit_hash字段
-根据instance_id从GitHub API获取正确的commit hash
+修复raw_dataset jsonl文件中的base_commit_hash字段
+直接从记录中读取org, repo, number，从GitHub API获取正确的commit hash
 """
 
 import os
@@ -35,27 +35,11 @@ def load_github_token(token_file="./tokens.txt"):
         return None
 
 
-def parse_instance_id(instance_id):
+def get_correct_commit_hash(org, repo, pr_number, token):
     """
-    解析instance_id格式: owner__repo-pr_number
-    例如: apache__skywalking-13677
+    通过GitHub API获取PR的正确commit hash (第一个commit的parent)
     """
-    if "-" not in instance_id:
-        raise ValueError(f"Invalid instance_id format: {instance_id}")
-
-    # 分离PR号和仓库信息
-    repo_part, pr_number = instance_id.rsplit("-", 1)
-    # 将双下划线替换为斜杠得到仓库路径
-    repo_path = repo_part.replace("__", "/")
-
-    return repo_path, pr_number
-
-
-
-def get_correct_commit_hash(repo_path, pr_number, token):
-    """
-    通过GitHub API获取PR的正确commit hash
-    """
+    repo_path = f"{org}/{repo}"
     url = f"{GITHUB_API_BASE}/repos/{repo_path}/pulls/{pr_number}/commits"
 
     headers = HEADERS.copy()
@@ -70,18 +54,25 @@ def get_correct_commit_hash(repo_path, pr_number, token):
         sleep_time = max(reset_time - int(time.time()), 0) + 1
         print(f"Rate limited. Sleeping for {sleep_time} seconds...")
         time.sleep(sleep_time)
-        return get_correct_commit_hash(repo_path, pr_number, token)  # 重试
+        return get_correct_commit_hash(org, repo, pr_number, token)  # 重试
 
     # 处理其他HTTP错误
     response.raise_for_status()
 
     commits = response.json()
-    return commits[0]["parents"][0]["sha"]
+    if not commits or len(commits) == 0:
+        raise ValueError(f"No commits found for PR {pr_number}")
+    
+    parents = commits[0].get("parents", [])
+    if not parents:
+        raise ValueError(f"No parent commits found for PR {pr_number}")
+    
+    return parents[0]["sha"]
 
 
 def process_jsonl_file(file_path, token):
     """
-    处理单个jsonl文件，更新其中的base_commit字段
+    处理单个jsonl文件，更新其中的base_commit_hash字段
     """
     print(f"Processing file: {file_path}")
 
@@ -97,47 +88,56 @@ def process_jsonl_file(file_path, token):
             try:
                 data = json.loads(line)
 
-                # 获取instance_id
-                instance_id = data.get("instance_id")
-                if not instance_id:
-                    print(f"Warning: No instance_id found in line {line_num}")
-                    lines.append(line)
-                    continue
-
-                # 解析instance_id获取仓库和PR号
-                try:
-                    repo_path, pr_number = parse_instance_id(instance_id)
-                except ValueError as e:
-                    print(
-                        f"Warning: Invalid instance_id format in line {line_num}: {e}"
-                    )
-                    lines.append(line)
-                    continue
-
-                # 获取当前的base_commit值
-                old_hash = data.get("base_commit")
+                # 直接从记录中读取org, repo, number
+                org = data.get("org")
+                repo = data.get("repo")
+                pr_number = data.get("number")
                 
+                if not org or not repo or not pr_number:
+                    print(f"Warning: Missing org/repo/number in line {line_num}")
+                    lines.append(line)
+                    continue
+
+                record_id = f"{org}/{repo}#{pr_number}"
+
+                # 获取当前的base_commit_hash值
+                old_hash = data.get("base_commit_hash")
+                
+                # 检查base.sha是否存在
+                # base_obj = data.get("base")
+                # base_sha = base_obj.get("sha") if isinstance(base_obj, dict) else None
+
                 try:
-                    correct_hash = get_correct_commit_hash(repo_path, pr_number, token)
+                    correct_hash = get_correct_commit_hash(org, repo, pr_number, token)
 
                     # 检查是否需要更新
-                    if old_hash != correct_hash:
-                        # 更新base_commit字段
-                        print(f"Updating {instance_id}: {old_hash} -> {correct_hash}")
-                        data["base_commit"] = correct_hash
+                    needs_update = (old_hash != correct_hash) or \
+                                   (base_sha != correct_hash)
+
+                    if needs_update:
+                        # 更新base_commit_hash字段
+                        print(f"Updating {record_id}: base_commit_hash {old_hash} -> {correct_hash}")
+                        data["base_commit_hash"] = correct_hash
+                        
+                        # 同步更新base.sha
+                        # if isinstance(base_obj, dict):
+                        #     print(f"Updating {record_id}: base.sha {base_sha} -> {correct_hash}")
+                        #     base_obj["sha"] = correct_hash
+                        
                         modified_count += 1
-                        print(f"Successfully updated {instance_id}")
+                        print(f"Successfully updated {record_id}")
 
                         # 将更新后的数据写回
                         lines.append(json.dumps(data, ensure_ascii=False) + "\n")
                     else:
                         # 已经一致，保持原样
-                        print(f"Skipping {instance_id}: already correct ({correct_hash[:8]}...)")
+                        print(f"Skipping {record_id}: already correct ({correct_hash[:8]}...)")
                         lines.append(line)
 
                 except Exception as e:
-                    print(f"Error processing {instance_id}: {e}")
+                    print(f"Error processing {record_id}: {e}")
                     lines.append(line)  # 保留原始行
+
 
             except json.JSONDecodeError as e:
                 print(f"Error decoding JSON in line {line_num}: {e}")
@@ -177,7 +177,7 @@ def process_directory(directory, token):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Fix base_commit_hash in jsonl files")
+    parser = argparse.ArgumentParser(description="Fix base_commit_hash in raw_dataset jsonl files")
     parser.add_argument("directory", help="Directory containing jsonl files")
     parser.add_argument(
         "--token-file", default="./tokens.txt", help="Path to GitHub token file"

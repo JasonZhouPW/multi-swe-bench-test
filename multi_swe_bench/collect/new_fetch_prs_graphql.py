@@ -288,6 +288,17 @@ def search_prs_with_graphql(
                       }
                     }
                   }
+                  commits(first: 1) {
+                    nodes {
+                      commit {
+                        parents(first: 1) {
+                          nodes {
+                            oid
+                          }
+                        }
+                      }
+                    }
+                  }
                 }
           }
         }
@@ -368,12 +379,14 @@ def search_prs_with_graphql(
                                 "message": merge_commit.get("message", ""),
                             }
                         ],
-                        "base_commit_hash": base_ref.get("target", {}).get("oid")
-                        if base_ref.get("target")
+                        "base_commit_hash": node.get("commits", {})
+                        .get("nodes", [{}])[0]
+                        .get("commit", {})
+                        .get("parents", {})
+                        .get("nodes", [{}])[0]
+                        .get("oid")
+                        if node.get("commits", {}).get("nodes")
                         else None,
-                        # "base_commit_hash": head_ref.get("target", {}).get("oid")
-                        # if head_ref.get("target")
-                        # else None,
                         "head_ref_name": head_ref.get("name") if head_ref else None,
                         "related_issues": issue_refs,
                         "labels": [
@@ -388,6 +401,14 @@ def search_prs_with_graphql(
                         "base": {
                             "ref": base_ref.get("name", ""),
                             "repo": {"name": repo, "full_name": repo_full_name},
+                            "sha": node.get("commits", {})
+                            .get("nodes", [{}])[0]
+                            .get("commit", {})
+                            .get("parents", {})
+                            .get("nodes", [{}])[0]
+                            .get("oid")
+                            if node.get("commits", {}).get("nodes")
+                            else None,
                         }
                         if base_ref
                         else None,
@@ -396,10 +417,14 @@ def search_prs_with_graphql(
                         f"Found PR: {pr_data['number']}, state: {pr_data['state']}, merged_at: {pr_data['merged_at']}, issues: {issue_refs}"
                     )
                     if pr_data["base_commit_hash"] is None:
-                        ## call
+                        # Fallback to REST API only if GraphQL somehow failed to return the commit parent
                         pr_data["base_commit_hash"] = get_correct_commit_hash(
                             repo_full_name, pr_number, token
                         )
+                    
+                    # Ensure consistency if base exists
+                    if pr_data["base"] and pr_data["base"].get("sha") is None:
+                        pr_data["base"]["sha"] = pr_data["base_commit_hash"]
                     prs.append(pr_data)
 
             if not page_info.get("hasNextPage", False):

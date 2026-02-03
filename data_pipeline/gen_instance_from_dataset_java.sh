@@ -318,6 +318,7 @@ fi
 
 if [[ -n $(git status --porcelain) ]]; then
   echo "check_git_changes: Uncommitted changes"
+  git status
   exit 1
 fi
 
@@ -370,7 +371,15 @@ fi
 set -e
 
 cd /home/{pr.repo}
-git apply --whitespace=nowarn /home/test.patch
+echo "DEBUG: git status before apply:"
+git status
+echo "DEBUG: applying patch verbose:"
+git apply --verbose --whitespace=nowarn /home/test.patch || {{
+    echo "APPLY FAILED"
+    echo "DEBUG: File content around line 30:"
+    head -n 50 gson/src/test/java/com/google/gson/functional/DefaultTypeAdaptersTest.java
+    exit 1
+}}
 if [ -f "pom.xml" ]; then
     mvn clean test -Dmaven.test.skip=false -DfailIfNoTests=false --batch-mode
 else
