@@ -185,6 +185,9 @@ while true; do
                 continue
             fi
             
+            read -rp "Max Results per language (default: 20): " max_results
+            max_results=${max_results:-20}
+            
             mkdir -p "$output_dir"
             
             echo -e "\n${CYAN}Will fetch raw datasets for ${#LANGUAGES[@]} languages:${NC}"
@@ -197,7 +200,7 @@ while true; do
                 
                 echo -e "\n${CYAN}[$lang] Fetching raw dataset...${NC}"
                 
-                CMD="bash \"$SCRIPTS_DIR/new_gen_raw_dataset_graphql.sh\" -l \"$lang\" -o \"$lang_output_dir\" -m \"$merged_after\""
+                CMD="bash \"$SCRIPTS_DIR/new_gen_raw_dataset_graphql.sh\" -l \"$lang\" -o \"$lang_output_dir\" -m \"$merged_after\" -n \"$max_results\""
                 echo -e "${CYAN}Executing: $CMD${NC}"
                 
                 if eval "$CMD"; then
