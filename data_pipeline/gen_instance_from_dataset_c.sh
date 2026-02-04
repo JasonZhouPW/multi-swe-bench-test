@@ -405,6 +405,7 @@ LANG_INIT="$BASE_DIR/../__init__.py"
 for org_dir in "$BASE_DIR"/../*/; do
     if [ -f "$org_dir/__init__.py" ]; then
         cat "$org_dir/__init__.py" >> "$LANG_INIT"
+        echo "" >> "$LANG_INIT"
     fi
 done
 echo "✅ Generated: $LANG_INIT"

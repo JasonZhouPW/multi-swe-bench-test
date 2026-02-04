@@ -86,10 +86,18 @@ echo "📘 Processing raw dataset: $RAW_FILE"
 echo ""
 
 while IFS= read -r line || [ -n "$line" ]; do
-    # Extract org and language from the nested structure of raw_dataset
-    ORG_RAW=$(echo "$line" | jq -r '.org')
-    REPO_RAW=$(echo "$line" | jq -r '.base.repo.name')
-    LANG_RAW=$(echo "$line" | jq -r '.base.repo.language')
+    # Extract fields from raw dataset, supporting both flat and nested structures
+    ORG_RAW=$(echo "$line" | jq -r '.org // .base.repo.name // empty')
+    REPO_RAW=$(echo "$line" | jq -r '.repo // .base.repo.name // empty')
+    
+    # Try to extract language from multiple possible locations
+    # Priority: top-level > nested structure > fallback
+    LANG_RAW=$(echo "$line" | jq -r '.language // .base.repo.language // empty')
+    
+    # Map repo name if empty (for backward compatibility)
+    if [ "$REPO_RAW" == "null" ] || [ -z "$REPO_RAW" ]; then
+        REPO_RAW=$(echo "$line" | jq -r '.base.repo.name // empty')
+    fi
 
     if [ "$ORG_RAW" == "null" ] || [ -z "$ORG_RAW" ]; then
         echo "⚠️  Skipped invalid line (missing org): $line"
