@@ -35,7 +35,8 @@ if [[ -f "$INPUT" ]]; then
 elif [[ -d "$INPUT" ]]; then
     # Case 2: input is a directory
     echo "📂 Input is a directory: $INPUT"
-    while IFS= read -r f; do FILES+=("$f"); done < <(ls "$INPUT"/*raw_dataset*.jsonl 2>/dev/null || true)
+    # Recursively find all *raw_dataset*.jsonl files in directory and subdirectories
+    while IFS= read -r f; do FILES+=("$f"); done < <(find "$INPUT" -type f -name "*raw_dataset*.jsonl" 2>/dev/null | sort)
 
     if [[ ${#FILES[@]} -eq 0 ]]; then
         echo "❌ No *raw_dataset*.jsonl files found in directory: $INPUT"
