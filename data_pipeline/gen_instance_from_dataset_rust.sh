@@ -370,3 +370,14 @@ sed -i "" "s/{{REPO}}/$REPO/g" "$TARGET_FILE" 2>/dev/null || sed -i "s/{{REPO}}/
 rm -f "$TARGET_FILE.bak"
 
 echo "✅ Generated: $TARGET_FILE"
+
+# Create __init__.py
+INIT_FILE="$BASE_DIR/__init__.py"
+> "$INIT_FILE"
+for pyfile in "$BASE_DIR"/*.py; do
+    filename=$(basename "$pyfile" .py)
+    if [ "$filename" != "__init__" ]; then
+        echo "from multi_swe_bench.harness.repos.$LANG_DIR.$ORG_PY.$filename import *" >> "$INIT_FILE"
+    fi
+done
+echo "✅ Generated: $INIT_FILE"

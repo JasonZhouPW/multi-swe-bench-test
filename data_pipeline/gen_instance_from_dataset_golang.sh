@@ -336,15 +336,11 @@ sed -i "" "s/{{REPO}}/$REPO/g" "$TARGET_FILE" 2>/dev/null || sed -i "s/{{REPO}}/
 echo "✅ Generated: $TARGET_FILE"
 
 # Create __init__.py
-cat > "$INIT_FILE" << EOF
-from multi_swe_bench.harness.repos.$LANG_DIR.$ORG_PY.$REPO_PY import *
-EOF
-
+> "$INIT_FILE"
+for pyfile in "$BASE_DIR"/*.py; do
+    filename=$(basename "$pyfile" .py)
+    if [ "$filename" != "__init__" ]; then
+        echo "from multi_swe_bench.harness.repos.$LANG_DIR.$ORG_PY.$filename import *" >> "$INIT_FILE"
+    fi
+done
 echo "✅ Generated: $INIT_FILE"
-
-# Add import to golang/__init__.py
-GOLANG_INIT="$PROJ_ROOT/multi_swe_bench/harness/repos/$LANG_DIR/__init__.py"
-if [ -f "$GOLANG_INIT" ]; then
-    echo "from multi_swe_bench.harness.repos.$LANG_DIR.$ORG_PY.$REPO_PY import *" >> "$GOLANG_INIT"
-    echo "✅ Added import to $GOLANG_INIT"
-fi
