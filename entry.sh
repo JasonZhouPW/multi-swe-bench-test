@@ -9,13 +9,6 @@ set -euo pipefail
 PROJ_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPTS_DIR="$PROJ_ROOT/scripts"
 
-# Fix backspace key in Linux environments
-saved_stty=$(stty -g 2>/dev/null || true)
-stty erase '^?' 2>/dev/null || true
-
-# Restore terminal settings on exit
-trap 'stty "$saved_stty" 2>/dev/null || true' EXIT
-
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -43,38 +36,38 @@ show_menu() {
 
 while true; do
     show_menu
-    read -rp "Selection: " choice
+    read -rep "Selection: " choice
 
     case $choice in
         1)
             echo -e "\n${YELLOW}--- Option 1: Fetch PRs from GitHub (GraphQL) ---${NC}"
             
             # Default values from the original script logic
-            read -rp "Language (default: Rust): " lang
+            read -rep "Language (default: Rust): " lang
             lang=${lang:-Rust}
             
-            read -rp "Min Stars (default: 10000): " stars
+            read -rep "Min Stars (default: 10000): " stars
             stars=${stars:-10000}
             
-            read -rp "Max Results (default: 20): " max_res
+            read -rep "Max Results (default: 20): " max_res
             max_res=${max_res:-20}
             
-            read -rp "Token Path (default: ./tokens.txt): " token
+            read -rep "Token Path (default: ./tokens.txt): " token
             token=${token:-./tokens.txt}
             
-            read -rp "Merged After (ISO format, e.g., 2025-01-01, optional): " merged_after
+            read -rep "Merged After (ISO format, e.g., 2025-01-01, optional): " merged_after
             
-            read -rp "Keywords (optional): " keywords
+            read -rep "Keywords (optional): " keywords
             
-            read -rp "Custom Query (overrides lang/stars/keywords, optional): " query
+            read -rep "Custom Query (overrides lang/stars/keywords, optional): " query
             
-            read -rp "Output Subdir Name (required): " out_name
+            read -rep "Output Subdir Name (required): " out_name
             if [ -z "$out_name" ]; then
                 echo -e "${RED}Error: Output Subdir Name is required.${NC}"
                 continue
             fi
 
-            read -rp "Enter target central directory (default: $PROJ_ROOT/data/raw_datasets): " target_dir
+            read -rep "Enter target central directory (default: $PROJ_ROOT/data/raw_datasets): " target_dir
             target_dir=${target_dir:-$PROJ_ROOT/data/raw_datasets}
             
             output_dir="$PROJ_ROOT/data/raw_datasets/$out_name"
@@ -108,7 +101,7 @@ while true; do
             # echo -e "Available raw datasets in data/raw_datasets/:"
             # ls "$PROJ_ROOT/data/raw_datasets"/*_raw_dataset.jsonl 2>/dev/null | xargs -n 1 basename | sort
             # echo ""
-            read -rp "Enter input directory : " input_dir
+            read -rep "Enter input directory : " input_dir
 
             if [ "$input_dir" = "list" ]; then
                 input_dir="$PROJ_ROOT/data/raw_datasets/all_raw_datasets"
@@ -119,19 +112,19 @@ while true; do
                 fi
             fi
 
-            read -rp "Enter output directory name: " output_name
+            read -rep "Enter output directory name: " output_name
             output_dir="$PROJ_ROOT/$output_name"
 
             mkdir -p "$output_dir"
 
             echo -e "${CYAN}Please specify filter options:${NC}"
-            read -rp "Keywords (comma-separated, optional): " keywords
-            read -rp "Categories (comma-separated, optional): " categories
-            read -rp "Match mode (any/all, default: any): " match_mode
+            read -rep "Keywords (comma-separated, optional): " keywords
+            read -rep "Categories (comma-separated, optional): " categories
+            read -rep "Match mode (any/all, default: any): " match_mode
             match_mode=${match_mode:-any}
-            read -rp "Min fix patch size (bytes, default: 0): " min_patch_size
+            read -rep "Min fix patch size (bytes, default: 0): " min_patch_size
             min_patch_size=${min_patch_size:-0}
-            read -rp "Min test patch size (bytes, default: 0): " min_test_patch_size
+            read -rep "Min test patch size (bytes, default: 0): " min_test_patch_size
             min_test_patch_size=${min_test_patch_size:-0}
 
             CMD="bash \"$SCRIPTS_DIR/filter_raw_dataset.sh\" -i \"$input_dir\" -o \"$output_dir\""
@@ -162,7 +155,7 @@ while true; do
             # echo -e "Available raw datasets in data/raw_datasets/:"
             # ls "$PROJ_ROOT/data/raw_datasets"/*_raw_dataset.jsonl 2>/dev/null | xargs -n 1 basename | sort
             # echo ""
-            read -rp "Enter relative path to raw dataset (or directory): " ds_path
+            read -rep "Enter relative path to raw dataset (or directory): " ds_path
             
             full_ds_path="$PROJ_ROOT/$ds_path"
             if [ ! -e "$full_ds_path" ] && [ -e "$PROJ_ROOT/$ds_path" ]; then
@@ -175,8 +168,8 @@ while true; do
             ;;
         4)
             echo -e "\n${YELLOW}--- Option 4: Extract Training Data ---${NC}"
-            read -rp "Input path (file or dir): " input_path
-            read -rp "Output file name (e.g., my_training_data.json): " output_file
+            read -rep "Input path (file or dir): " input_path
+            read -rep "Output file name (e.g., my_training_data.json): " output_file
             
             full_output_path="$PROJ_ROOT/data/$output_file"
             
@@ -190,19 +183,19 @@ while true; do
             # Define languages array
             LANGUAGES=("Go" "Java" "Python" "Rust" "JavaScript" "TypeScript" "C" "C++")
             
-            read -rp "Output directory (required): " output_dir
+            read -rep "Output directory (required): " output_dir
             if [ -z "$output_dir" ]; then
                 echo -e "${RED}Error: Output directory is required.${NC}"
                 continue
             fi
             
-            read -rp "Merged After (ISO format, e.g., 2025-01-01, required): " merged_after
+            read -rep "Merged After (ISO format, e.g., 2025-01-01, required): " merged_after
             if [ -z "$merged_after" ]; then
                 echo -e "${RED}Error: Merged After date is required.${NC}"
                 continue
             fi
             
-            read -rp "Max Results per language (default: 20): " max_results
+            read -rep "Max Results per language (default: 20): " max_results
             max_results=${max_results:-20}
             
             mkdir -p "$output_dir"
