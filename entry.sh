@@ -9,6 +9,13 @@ set -euo pipefail
 PROJ_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPTS_DIR="$PROJ_ROOT/scripts"
 
+# Fix backspace key in Linux environments
+saved_stty=$(stty -g 2>/dev/null || true)
+stty erase '^?' 2>/dev/null || true
+
+# Restore terminal settings on exit
+trap 'stty "$saved_stty" 2>/dev/null || true' EXIT
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
