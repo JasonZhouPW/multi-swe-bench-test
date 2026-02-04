@@ -30,6 +30,7 @@ show_menu() {
     echo -e "3) ${GREEN}Build Dataset by PRs${NC} (Environment Setup)"
     echo -e "4) ${GREEN}Extract Training Data${NC} (For Fine-tuning)"
     echo -e "5) ${GREEN}Fetch All Raw Datasets${NC} (All Languages)"
+    echo -e "6) ${GREEN}Batch Unify Repos${NC} (Batch process directories)"
     echo -e "q) Exit"
     echo ""
 }
@@ -223,6 +224,29 @@ while true; do
             echo -e "\n${GREEN}Fetch all raw datasets complete.${NC}"
             echo -e "Results saved to: $output_dir"
             echo -e "Subdirectories: ${LANGUAGES[*]}\n"
+            ;;
+        6)
+            echo -e "\n${YELLOW}--- Option 6: Batch Unify Repos ---${NC}"
+            
+            read -rep "Enter directory path: " input_dir
+            if [ -z "$input_dir" ]; then
+                echo -e "${RED}Error: Directory path is required.${NC}"
+                continue
+            fi
+            
+            # Verify directory exists
+            if [ ! -d "$input_dir" ]; then
+                echo -e "${RED}Error: Directory does not exist: $input_dir${NC}"
+                continue
+            fi
+            
+            echo -e "${CYAN}Executing: bash \"$SCRIPTS_DIR/batch_unify_repos.sh\" \"$input_dir\"${NC}"
+            if bash "$SCRIPTS_DIR/batch_unify_repos.sh" "$input_dir"; then
+                echo -e "\n${GREEN}Batch unify repos completed successfully.${NC}"
+            else
+                echo -e "\n${RED}Batch unify repos failed.${NC}"
+            fi
+            echo ""
             ;;
         q|Q)
             echo -e "${YELLOW}Exiting. Goodbye!${NC}"
