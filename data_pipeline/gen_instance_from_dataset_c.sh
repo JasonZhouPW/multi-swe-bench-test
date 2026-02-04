@@ -398,3 +398,13 @@ for pyfile in "$BASE_DIR"/*.py; do
     fi
 done
 echo "✅ Generated: $INIT_FILE"
+
+# Rebuild language root __init__.py from all org/__init__.py files
+LANG_INIT="$BASE_DIR/../__init__.py"
+> "$LANG_INIT"
+for org_dir in "$BASE_DIR"/../*/; do
+    if [ -f "$org_dir/__init__.py" ]; then
+        cat "$org_dir/__init__.py" >> "$LANG_INIT"
+    fi
+done
+echo "✅ Generated: $LANG_INIT"
