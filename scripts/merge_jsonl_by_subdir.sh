@@ -11,16 +11,16 @@ set -euo pipefail
 # 1. Takes a directory path as parameter
 # 2. Finds all subdirectories
 # 3. Merges all .jsonl files in each subdirectory into one file
-# 4. Names output file as: filtered_YYYYMMDD_<subdir_name>.jsonl
+# 4. Names output file as: filtered_YYYYMMDD_<subdir_name>_raw_dataset.jsonl
 #
 # Example:
 #   ./merge_jsonl_by_subdir.sh ./raw_datasets/filtered
 #
 #   Output:
-#     - filtered_20260204_bug-fix.jsonl
-#     - filtered_20260204_edge.jsonl
-#     - filtered_20260204_performance.jsonl
-#     - filtered_20260204_refactor.jsonl
+#     - filtered_20260204_bug-fix_raw_dataset.jsonl
+#     - filtered_20260204_edge_raw_dataset.jsonl
+#     - filtered_20260204_performance_raw_dataset.jsonl
+#     - filtered_20260204_refactor_raw_dataset.jsonl
 #
 # ================================================================
 
@@ -73,24 +73,42 @@ echo ""
 merge_jsonl_files() {
     local subdir="$1"
     local subdir_name=$(basename "$subdir")
-    local output_file="$INPUT_DIR/filtered_${CURRENT_DATE}_${subdir_name}.jsonl"
+    local output_file="$INPUT_DIR/filtered_${CURRENT_DATE}_${subdir_name}_raw_dataset.jsonl"
 
-    # Find all .jsonl files in the subdirectory
-    local jsonl_files
-    jsonl_files=$(find "$subdir" -maxdepth 1 -type f -name "*.jsonl" | sort)
+    # Find all .jsonl files in the subdirectory, filtering out binary files
+    local jsonl_files=()
+    while IFS= read -r -d '' f; do
+        # Check if file is a regular file, readable, and non-empty
+        [ -f "$f" ] && [ -r "$f" ] && [ -s "$f" ] || continue
+        
+        # Check if file contains null bytes (binary file indicator)
+        if grep -q $'\0' "$f" 2>/dev/null; then
+            echo -e "${YELLOW}  [SKIP] $(basename "$f"): contains binary data${NC}"
+            continue
+        fi
+        
+        # Check if file starts with valid JSON-like content
+        FIRST_LINE=$(head -n 1 "$f" 2>/dev/null | tr -d '\0\r\n')
+        if echo "$FIRST_LINE" | grep -q '{' 2>/dev/null; then
+            jsonl_files+=("$f")
+        else
+            echo -e "${YELLOW}  [SKIP] $(basename "$f"): not valid JSON format${NC}"
+        fi
+    done < <(find "$subdir" -maxdepth 1 -type f -name "*.jsonl" -print0 | sort -z)
 
-    local file_count=$(echo "$jsonl_files" | grep -c . || echo "0")
+    local file_count=${#jsonl_files[@]}
 
     if [ "$file_count" -eq 0 ]; then
-        echo -e "${YELLOW}  [SKIP] ${subdir_name}: No .jsonl files found${NC}"
+        echo -e "${YELLOW}  [SKIP] ${subdir_name}: No valid .jsonl files found${NC}"
         return 1
     fi
 
     echo -e "${GREEN}  [MERGE] ${subdir_name}: ${file_count} file(s)${NC}"
 
-    # Merge all jsonl files
-    # Using cat to concatenate files
-    cat $jsonl_files > "$output_file"
+    # Merge all jsonl files, removing any potential null bytes
+    for f in "${jsonl_files[@]}"; do
+        cat "$f" | tr -d '\0' >> "$output_file"
+    done
 
     local merged_lines=0
     if [ -f "$output_file" ]; then
