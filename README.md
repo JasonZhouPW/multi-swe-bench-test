@@ -23,7 +23,7 @@ Each language has a dedicated dataset directory with thousands of real-world PRs
 - **Multilingual Support**: 8+ programming languages with dedicated datasets
   - Java, TypeScript, JavaScript, Go, Rust, C++, Python
   - Each language has specialized instance generation scripts
-  
+
 - **GraphQL-Powered Data Collection**
   - High-performance GitHub PR fetching via GraphQL API
   - Custom query support for flexible filtering
@@ -33,13 +33,14 @@ Each language has a dedicated dataset directory with thousands of real-world PRs
 - **Interactive CLI Workflow**
   - `entry.sh` provides menu-driven interface for common tasks
   - No need to memorize complex command-line arguments
-  - Streamlined 4-step pipeline execution
+  - Streamlined 6-step pipeline execution
 
 - **Filtering & Data Processing**
   - Keyword-based filtering (supports comma-separated lists)
   - Category filtering (Bug Fix, Feature, Refactor, etc.)
   - Match mode options (any/all)
   - Batch processing for multiple datasets
+  - Binary data filtering for clean JSONL files
 
 - **Docker-Based Evaluation**
   - Isolated test environments for reproducible results
@@ -55,6 +56,12 @@ Each language has a dedicated dataset directory with thousands of real-world PRs
   - Automated test execution
   - Report generation with detailed metrics
   - Patch analysis with Semgrep integration
+
+- **Automated __init__.py Management**
+  - Auto-generate org/__init__.py files
+  - Auto-rebuild language root __init__.py
+  - Auto-update repos/__init__.py
+  - Prevents duplicate imports
 
 ---
 
@@ -98,118 +105,147 @@ make install-dev
 - `toml` - Configuration parsing
 - `pyyaml` - YAML processing
 - `PyGithub` - GitHub API client
-- `unidiff` - Diff parsing
-- `swe-rex` - Regular expressions for SWE tasks
 
-**Dev Dependencies:**
-- `ruff` - Fast Python linter and formatter
-- `typos` - Source code spell checker
-- `prettier` - Code formatter
-
-### 🎯 Quick Start
-Use the interactive entry script to start common tasks:
-```bash
-bash entry.sh
-```
-
-The interactive menu provides options for:
-1. **Fetch PRs from GitHub** using GraphQL API
-2. **Filter Raw Dataset** by keywords and categories
-3. **Build Dataset by PRs** for environment setup
-4. **Extract Training Data** for fine-tuning
+**System Tools:**
+- `jq` - JSON processing
+- `git` - Version control
+- `bash` - Shell scripting (required for all scripts)
 
 ---
 
-## 📋 Full Execution Pipeline
+## 🎯 Quick Start (Interactive Mode)
 
-The pipeline follows a structured 5-step process. Detailed instructions can be found in [all_process.md](all_process.md).
+Run the interactive menu for guided setup:
 
-### 1. Generate Raw Dataset (GraphQL-based)
-
-Fetch PRs from GitHub using the high-performance GraphQL API:
 ```bash
-# Basic fetch with language filter
-./scripts/new_gen_raw_dataset_graphql.sh -l Rust -s 10000 -n 20 -o ./data/raw_datasets/rust_data
-
-# With additional filters
-./scripts/new_gen_raw_dataset_graphql.sh \
-  -l TypeScript \
-  -s 5000 \
-  -n 50 \
-  -o ./data/raw_datasets/ts_data \
-  -m 2025-01-01 \
-  -k "bug fix"
-
-# Use custom query for advanced filtering
-./scripts/new_gen_raw_dataset_graphql.sh \
-  -q "language:go stars:>1000" \
-  -o ./data/raw_datasets/go_custom \
-  -n 100
-
-# Collect and categorize data
-./scripts/collect_raw_dataset.sh
+./entry.sh
 ```
 
-**Parameters:**
-- `-l`: Programming language (Python, Rust, Java, TypeScript, etc.)
-- `-s`: Minimum star count (default: 10000)
-- `-n`: Maximum number of repos to fetch
-- `-o`: Output directory (required)
-- `-m`: "Merged after" date in ISO format (e.g., 2025-01-01)
-- `-k`: Keywords to append to search query
-- `-q`: Custom GraphQL search query (overrides -l, -s, -k)
-- `-t`: GitHub token path (default: ./tokens.txt)
+The entry menu provides easy access to:
+1. Fetch PRs from GitHub (GraphQL)
+2. Filter Raw Dataset
+3. Build Dataset by PRs
+4. Extract Training Data
+5. Fetch All Raw Datasets
+6. **Batch Unify Repos** (batch process directories)
+7. Exit
 
-### 2. (Optional) Filter & Refine Data
+---
 
-Filter datasets by keywords, categories, and match modes:
+## 📖 Usage Guide
+
+### 1. Fetch PRs from GitHub
+
+Use GraphQL API to fetch PRs from GitHub repositories:
+
 ```bash
+# Fetch by language and minimum stars
+./scripts/new_gen_raw_dataset_graphql.sh -l Python -s 10000 -o ./data/raw_datasets
+
+# Fetch using custom query
+./scripts/new_gen_raw_dataset_graphql.sh -q "language:Java stars:>10000 is:pr is:merged" -o ./data/raw_datasets
+
+# Specify date range
+./scripts/new_gen_raw_dataset_graphql.sh -l Go -s 5000 -m "2025-01-01" -o ./data/raw_datasets
+```
+
+#### Batch Processing (All Languages)
+
+```bash
+# fetch all languages at once
+./data_pipeline/gen_all_raw_datasets_new.sh
+```
+
+### 2. Filter Raw Datasets
+
+Filter datasets by keywords, categories, or patch size:
+
+```bash
+# Interactive mode (no arguments)
+./scripts/filter_raw_dataset.sh
+
 # Filter by keywords
-./scripts/filter_raw_dataset.sh \
-  -i ./data/raw_datasets/rust_data \
-  -o ./data/filtered/rust_bugfix \
-  -k "bug,fix,repair"
+./scripts/filter_raw_dataset.sh -i ./data/raw_datasets -o ./data/filtered -k "security,bug"
 
-# Filter by categories (Bug Fix, Feature, Refactor, etc.)
-./scripts/filter_raw_dataset.sh \
-  -i ./data/raw_datasets \
-  -o ./data/filtered/features \
-  -c "Feature,Enhancement"
+# Filter by category
+./scripts/./scripts/filter_raw_dataset.sh -i ./data/raw_datasets -o ./data/bug-fix -c "bug,bugfix"
 
-# Combine filters with match mode
-./scripts/filter_raw_dataset.sh \
-  -i ./data/raw_datasets \
-  -o ./data/filtered/strict \
-  -k "memory,performance" \
-  -m all
+# Match mode (any/all)
+./scripts/filter_raw_dataset.sh -i ./data/raw_datasets -o ./data/filtered -m all
+
+# Minimum patch size (excluding docs)
+./scripts/filter_raw_dataset.sh -i ./data/raw_datasets -o ./data/filtered -p 1024 --min-test-patch-size 512
 ```
 
-**Filter Modes:**
-- `any`: Match any of the criteria (default)
-- `all`: Match all criteria
+### 3. Build Dataset by PRs
 
-### 3. Build Dataset & Environment
+Generate test environments and dataset JSONL files:
 
-Generate Dockerfiles and environment scripts for evaluation:
 ```bash
-# Process single dataset file
+# Process single raw dataset
 ./scripts/unify_repo_scripts.sh ./data/raw_datasets/rust_raw_dataset.jsonl
 
-# Process entire directory
-./scripts/unify_repo_scripts.sh ./data/raw_datasets/
+# Process multiple raw datasets
+./scripts/unify_repo_scripts.sh ./data/raw_datasets/*_raw_dataset.jsonl
 
-# Test mode (dry run)
-./scripts/unify_repo_scripts_test.sh ./data/raw_datasets/test_raw_dataset.jsonl
+# Process directories recursively (supports subdirectories)
+./scripts/unify_repo_scripts.sh ./data/raw_datasets/filtered/bug-fix
 ```
 
 This step creates:
-- Repositories in `multi-swe-bench/harness/repos/`
+- Repositories in `multi_swe_bench/harness/repos/`
 - Test instances and evaluation configs
 - Dockerfiles for isolated testing
+- `__init__.py` files for proper Python imports
 
-### 4. Generate Repair Patches
+### 4. Batch Unify Repos
+
+Process multiple directories in batch:
+
+```bash
+# Process all subdirectories
+./scripts/batch_unify_repos.sh ./data/raw_datasets
+
+# Or use entry.sh menu option 6
+./entry.sh
+# Select option 6 and enter directory path
+```
+
+This is useful when you have structured data like:
+```
+./data/raw_datasets/filtered/
+  ├── bug-fix/
+  ├── edge/
+  ├── performance/
+  └── refactor/
+```
+
+### 5. Merge JSONL Files by Subdirectory
+
+Merge JSONL files from subdirectories:
+
+```bash
+./scripts/merge_jsonl_by_subdir.sh ./data/raw_datasets/filtered
+```
+
+Output files:
+```
+./data/raw_datasets/filtered/
+  ├── filtered_20260204_bug-fix_raw_dataset.jsonl
+  ├── filtered_20260204_edge_raw_dataset.jsonl
+  ├── filtered_20260204_performance_raw_dataset.jsonl
+  └── filtered_20260204_refactor_raw_dataset.jsonl
+```
+
+Features:
+- Skips binary files (macOS extended attributes)
+- Validates JSON format before merging
+- Removes null bytes from input files
+
+### 6. Generate Repair Patches
 
 Use agents like **SWE-Agent** or tools like **Massgen** to generate fixes:
+
 ```bash
 # Generate patches using SWE-Agent
 ./scripts/run_patch.sh ./data/raw_datasets/rust_raw_dataset.jsonl
@@ -221,9 +257,10 @@ Use agents like **SWE-Agent** or tools like **Massgen** to generate fixes:
 ./scripts/batch_patch_analysis.sh ./data/patches/
 ```
 
-### 5. Run Evaluation
+### 7. Run Evaluation
 
 Execute the final benchmark evaluation:
+
 ```bash
 # Full pipeline with evaluation
 ./scripts/run_full_pipeline.sh ./data/raw_datasets/rust_raw_dataset.jsonl
@@ -237,51 +274,37 @@ Execute the final benchmark evaluation:
 
 ---
 
-### 6. Additional Data Processing Utilities
+## 🔧 Advanced Usage
+
+### Data Processing Utilities
 
 #### SWE-bench Oracle Dataset Generation
-Generate a comprehensive `dataset.jsonl` compatible with SWE-bench. This is a 2-step process:
 
-**Step 1: Compile Raw Data**
-Generate a consolidated dataset file from individual raw JSONL files.
+Generate a comprehensive `dataset.jsonl` compatible with SWE-bench:
+
 ```bash
-./scripts/gen_swe_oracle_dataset.sh <input_directory> <output_file>
-
-# Example
+# Step 1: Compile raw data
 ./scripts/gen_swe_oracle_dataset.sh ./data/raw_datasets swe_oracle_dataset.jsonl
-```
 
-**Step 2: Enrich with Oracle Text**
-Populate the `text` field with issue descriptions, PR bodies, and maintainer comments.
-```bash
-# Process a directory or specific file
+# Step 2: Enrich with Oracle text
 python scripts/generate_oracle_text.py --directory ./path/to/dataset_dir
-# OR
 python scripts/generate_oracle_text.py --file swe_oracle_dataset.jsonl
 ```
 
-#### Fix Base Commit Hash (this is for fix old version of dataset, latest version is already fixed)
-Fix incorrect or missing `base_commit` hashes in JSONL files by fetching from GitHub API:
-```bash
-python scripts/fix_commithash.py <directory_containing_jsonl>
-
-# Example
-python scripts/fix_commithash.py ./data/raw_datasets
-```
-
 #### Patch Size Filtering
-Filter out instances where the code patch size (excluding docs) is smaller than a threshold:
-```bash
-./scripts/filter_large_patches.sh <input_dir> <output_file> [min_bytes]
 
-# Example
+Filter instances by patch size:
+
+```bash
 ./scripts/filter_large_patches.sh ./data/raw_datasets ./data/filtered/large_patches.jsonl 1024
 ```
 
-#### Language Field Fix ， this is for fix old version of dataset, latest version is already fixed
-Add or fix the `language` field in JSONL datasets:
+#### Fix Base Commit Hash
+
+Fix incorrect or missing `base_commit` hashes:
+
 ```bash
-python scripts/add_language_field.py -d ./data/raw_datasets -l Python
+python scripts/fix_commithash.py ./data/raw_datasets
 ```
 
 ---
@@ -290,153 +313,91 @@ python scripts/add_language_field.py -d ./data/raw_datasets -l Python
 
 | Task | Command | Description |
 |------|---------|-------------|
+| **Interactive Menu** | `./entry.sh` | Interactive menu for all tasks |
 | **Fetch PRs** | `./scripts/new_gen_raw_dataset_graphql.sh -l [Lang] -s [Stars] -n [N] -o [Dir]` | GraphQL API for fetching PRs |
 | **Custom Query** | `./scripts/new_gen_raw_dataset_graphql.sh -q "[query]" -o [Dir] -n [N]` | Custom GitHub search query |
 | **Filter Data** | `./scripts/filter_raw_dataset.sh -i [Input] -o [Output] -k [Keywords]` | Filter by keywords/categories |
 | **Build Dataset** | `./scripts/unify_repo_scripts.sh [Raw_Dataset]` | Generate test environments |
 | **Collect Data** | `./scripts/collect_raw_dataset.sh` | Complete and categorize raw data |
 | **Copy Datasets** | `./scripts/copy_raw_dataset.sh [Source] [Target]` | Merge datasets |
+| **Batch Unify** | `./scripts/batch_unify_repos.sh [Directory]` | Batch process directories |
+| **Merge JSONL** | `./scripts/merge_jsonl_by_subdir.sh [Directory]` | Merge JSONL by subdirectory |
 | **Extract Training** | `./scripts/extract_training_data.sh [Input] [Output_JSON]` | Format for fine-tuning |
 | **Run Patches** | `./scripts/run_patch.sh [Raw_Dataset]` | Generate repair patches |
-| **Evaluate** | `./scripts/run_full_pipeline.sh [Raw_Dataset]` | Full evaluation pipeline |
-| **Analyze Patches** | `./scripts/analyze_patch.sh [Semgrep_Output]` | Quality check on patches |
-| **Gen Oracle Text** | `python scripts/generate_oracle_text.py --directory [Dir]` | Add issue/PR context to data |
-| **Gen Oracle DS** | `./scripts/gen_swe_oracle_dataset.sh [In] [Out]` | Generate SWE-bench oracle dataset |
-| **Fix Commit Hash** | `python scripts/fix_commithash.py [Dir]` | Fix incorrect base commit hashes |
-| **Filter Patch Size** | `./scripts/filter_large_patches.sh [In] [Out] [Size]` | Filter by patch byte size |
-| **Fix Info** | `python scripts/add_language_field.py -d [Dir] -l [Lang]` | Add missing language field |
-| **Format Code** | `make format` | Format Python files |
-| **Lint Code** | `make lint` | Run ruff linter |
-| **Fix Linting** | `make fix` | Auto-fix linting issues |
-| **Clean Cache** | `make clean` | Remove Python cache files |
+| **Run Evaluation** | `scripts/run_full_pipeline.sh [Raw_Dataset]` | Complete evaluation pipeline |
 
 ---
 
-## 📂 Project Structure
+## 🧪 Testing & Validation
 
-### Core Components
+### Test Mode
 
-```
-multi-swe-bench/
-├── entry.sh                         # Interactive menu for common operations
-├── Makefile                         # Build and development commands
-├── setup.py                         # Package configuration
-├── config.json                      # Main configuration file
-│
-├── scripts/                         # High-level entry scripts (29+ files)
-│   ├── new_gen_raw_dataset_graphql.sh      # GraphQL API PR fetching
-│   ├── filter_raw_dataset.sh                 # Dataset filtering
-│   ├── unify_repo_scripts.sh                 # Build evaluation environments
-│   ├── run_full_pipeline.sh                  # Complete pipeline runner
-│   ├── extract_training_data.sh              # Training data extraction
-│   ├── run_evaluation.sh                     # Evaluation runner
-│   └── ...
-│
-├── data_pipeline/                   # Data processing workers
-│   ├── Python Scripts:
-│   │   ├── new_fetch_prs_graphql.py         # GraphQL PR fetching logic
-│   │   ├── fetch_github_repo_gql.py         # GitHub repository fetching
-│   │   ├── filter_prs.py                     # PR filtering utilities
-│   │   ├── filter_repo.py                    # Repository filtering
-│   │   ├── build_dataset.py                  # Dataset building (in harness/)
-│   │   ├── get_related_issues.py             # Issue-PR relationship
-│   │   ├── merge_prs_with_issues.py          # Data merging
-│   │   └── util.py                          # General utilities
-│   └── Shell Scripts:
-│       ├── gen_instance_from_dataset_*.sh   # Language-specific instance generation
-│       ├── gen_all_raw_datasets_new.sh      # Batch dataset generation
-│       ├── create_org_dir.sh                # Organization directory setup
-│       └── run_*.sh                         # Various runner scripts
-│
-├── multi_swe_bench/                  # Core Python package
-│   ├── collect/                         # Data collection components
-│   │   └── new_fetch_prs_graphql.py     # Main GraphQL fetcher
-│   ├── harness/                         # Evaluation harness
-│   │   ├── build_dataset.py             # Build benchmark instances
-│   │   ├── gen_report.py                # Generate evaluation reports
-│   │   ├── run_evaluation.py            # Execute tests in Docker
-│   │   └── dataset.py                   # Dataset models and utilities
-│   └── utils/                           # Shared utilities
-│       ├── args_util.py                 # Argument parsing
-│       ├── docker_util.py               # Docker operations
-│       ├── env_to_dockerfile.py         # Environment to Dockerfile conversion
-│       ├── git_util.py                  # Git operations
-│       ├── session_util.py              # Session management
-│       └── logger.py                    # Logging utilities
-│
-├── data/                            # Generated data directory
-│   ├── raw_datasets/                # Collected GitHub PR data (JSONL format)
-│   ├── datasets/                    # Processed benchmark instances
-│   ├── repos/                       # Cloned GitHub repositories
-│   ├── patches/                     # Generated repair patches
-│   ├── logs/                        # Execution and evaluation logs
-│   └── workdir/                     # Temporary working directories
-│
-├── tests/                           # Unit and integration tests
-│   ├── test_pr_details.py
-│   ├── test_graphql_query.py
-│   └── ...
-│
-├── docs/                            # Additional documentation
-│   └── ...
-│
-└── Documentation Files:
-    ├── all_process.md               # Complete pipeline workflow
-    ├── Multi-SWE-Bench_Full_Guide.md # Comprehensive user guide
-    ├── gen_dataset.md               # Dataset generation instructions
-    ├── run_all_pipeline.md         # Pipeline execution guide
-    └── sh_functions.md             # Shell function reference
-```
+Use test mode for dry runs:
 
-
-## 📜 License
-
-This project is licensed under the Apache License 2.0.
-
-## 📖 Additional Documentation
-
-| Document | Description |
-|----------|-------------|
-| [all_process.md](all_process.md) | Detailed step-by-step pipeline documentation |
-| [Multi-SWE-Bench_Full_Guide.md](Multi-SWE-Bench_Full_Guide.md) | Comprehensive user guide |
-| [gen_dataset.md](gen_dataset.md) | Dataset generation guide |
-| [Makefile commands](#common-commands-summary) | Development and build commands |
-
-## ⚙️ Configuration
-
-### GitHub Token
-
-Create a GitHub personal access token and save it to `tokens.txt`:
 ```bash
-echo "your_github_token_here" > tokens.txt
-chmod 600 tokens.txt
+./scripts/unify_repo_scripts_test.sh ./data/raw_datasets/test_raw_dataset.jsonl
 ```
 
-### config.json
+### Data Quality Checks
 
-The main configuration file (`config.json`) contains settings for:
-- Model configs (API endpoints, model names)
-- Evaluation parameters
-- Data collection settings
+```bash
+# Check for JSON validation errors
+jq -c . ./data/raw_datasets/*.jsonl 2>&1 | head -10
 
-## 🐛 Troubleshooting
+# Check for blank lines
+grep -c '^$' ./data/raw_datasets/*.jsonl
 
-### Docker Issues
-- Ensure Docker daemon is running: `docker ps`
-- Check disk space: `docker system df`
+# Validate instance count
+wc -l ./data/raw_datasets/*.jsonl
+```
 
-### GitHub Rate Limits
-- For large fetches (>100 repos), consider using multiple tokens
-- GraphQL has higher limits than REST API
+---
 
-### Memory Issues
-- Limit concurrent jobs in `run_full_pipeline.sh`
-- Use `filter_raw_dataset.sh` to reduce dataset size
+## 📊 Evaluation Metrics
+
+The framework tracks multiple metrics for evaluation:
+
+- **Success Rate**: Percentage of instances resolved
+- **Patch Validity**: Whether the patch correctly addresses the issue
+- **Test Pass Rate**: Automated test execution results
+- **Code Quality**: Semgrep-based static analysis
+- **Execution Time**: Time taken to apply and test
+
+---
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please follow these guidelines:
-1. Format code: `make format`
-2. Run linter: `make lint`
-3. Add tests for new features
-4. Update documentation
+We welcome contributions! Please see `docs/CONTRIBUTING.md` for guidelines.
+
+---
+
+## 📚 Documentation
+
+- `docs/Multi-SWE-Bench_Full_Guide.md` - Comprehensive guide
+- `docs/build-dataset-quick-start.md` - Quick start guide
+- `docs/Multi-SWE-Bench_Full_Guide.md` - Full workflow documentation
+- `docs/contribution-demo.md` - Contribution examples
+- `all_process.md` - Process flow documentation
+- `TASk_COMPLETION_SUMMARY.md` - Task completion summary
+
+---
+
+## 📞 Support
+
+For issues and questions:
+- GitHub Issues: https://github.com/ontology-tech/multi-swe-bench/issues
+- Discord: [Link to Discord server if applicable]
+
+---
+
+## 📄 License
+
+[Specify your license here]
+
+---
+
+## 🔗 Related Projects
+
+- [SWE-bench](https://swe-bench.github.io/)
+- [SWE-Agent](https://github.com/princeton-nlp/SWE-Agent)
+- [Massgen](https://github.com/princeton-nlp/Massgen)
