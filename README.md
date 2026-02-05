@@ -168,7 +168,7 @@ Filter datasets by keywords, categories, or patch size:
 ./scripts/filter_raw_dataset.sh -i ./data/raw_datasets -o ./data/filtered -k "security,bug"
 
 # Filter by category
-./scripts/./scripts/filter_raw_dataset.sh -i ./data/raw_datasets -o ./data/bug-fix -c "bug,bugfix"
+./scripts/filter_raw_dataset.sh -i ./data/raw_datasets -o ./data/bug-fix -c "bug,bugfix"
 
 # Match mode (any/all)
 ./scripts/filter_raw_dataset.sh -i ./data/raw_datasets -o ./data/filtered -m all
