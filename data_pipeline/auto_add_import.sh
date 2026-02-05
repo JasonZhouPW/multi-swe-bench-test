@@ -64,8 +64,11 @@ case "$LANG" in
     javascript|js|node|nodejs)
         LANG_DIR="javascript"
         ;;
-    cpp|c++|c)
+    cpp|c++)
         LANG_DIR="cpp"
+        ;;
+    c)
+        LANG_DIR="c"
         ;;
     typescript|TypeScript|ts)
         LANG_DIR="typescript"

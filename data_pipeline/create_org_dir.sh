@@ -40,6 +40,12 @@ map_language() {
         Java|java)
             echo "java"
             ;;
+        C|c)
+            echo "c"
+            ;;
+        Cpp|cpp|C\+\+|c\+\+)
+            echo "cpp"
+            ;;
         *)
             echo "unknown"
             ;;
