@@ -150,7 +150,7 @@ ENV LC_ALL=C.UTF-8
 RUN sed -i 's|http://deb.debian.org/debian|http://archive.debian.org/debian|g' /etc/apt/sources.list && \\
     sed -i 's|http://security.debian.org/debian-security|http://archive.debian.org/debian-security|g' /etc/apt/sources.list && \\
     apt-get update && apt-get install -y libbrotli-dev libcurl4-openssl-dev cmake
-RUN apt-get install -y clang build-essential
+RUN apt-get install -y clang build-essential cmake
 
 {code}
 
