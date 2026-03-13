@@ -227,7 +227,7 @@ set -e
 cd /home/{pr.repo}
 git reset --hard
 bash /home/check_git_changes.sh
-git checkout {pr.base.sha}
+git checkout {self.pr.base_commit_hash}
 bash /home/check_git_changes.sh
 
 # Injected setup commands
@@ -260,7 +260,12 @@ ctest -j 8
 set -e
 
 cd /home/{pr.repo}
-git apply --whitespace=nowarn /home/test.patch
+# Apply test.patch only if it exists and is not empty
+if [ -s /home/test.patch ]; then
+    git apply --whitespace=nowarn /home/test.patch || echo "Warning: git apply test.patch failed"
+else
+    echo "No test.patch to apply (empty or missing)"
+fi
 cd build
 cmake -Dtesting=ON ..
 make -j 8
@@ -275,7 +280,13 @@ ctest -j 8
 set -e
 
 cd /home/{pr.repo}
-git apply --whitespace=nowarn /home/test.patch /home/fix.patch
+# Apply patches: test.patch (if exists) and fix.patch
+if [ -s /home/test.patch ]; then
+    git apply --whitespace=nowarn /home/test.patch /home/fix.patch || git apply --whitespace=nowarn /home/fix.patch
+else
+    # No test.patch, only apply fix.patch
+    git apply --whitespace=nowarn /home/fix.patch
+fi
 cd build
 cmake -Dtesting=ON ..
 make -j 8

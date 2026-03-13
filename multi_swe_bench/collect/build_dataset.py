@@ -103,9 +103,13 @@ def extract_patches(pull: dict, token: str) -> tuple[str, str]:
 
     try:
         for hunk in PatchSet(patch):
-            if any(
-                test_word in hunk.path for test_word in ["test", "tests", "e2e", "testing"]
-            ):
+            # Check if the file is a test file based on common test directory patterns
+            path_lower = hunk.path.lower()
+            is_test = any(
+                test_word in path_lower
+                for test_word in ["test", "tests", "e2e", "testing", "spec", "specs", "__tests__"]
+            )
+            if is_test:
                 test_patch += str(hunk)
             else:
                 fix_patch += str(hunk)
@@ -159,10 +163,13 @@ def extract_patches_from_compare(pull: dict, token: str) -> tuple[str, str]:
 
     try:
         for hunk in PatchSet(patch):
-            if any(
-                test_word in hunk.path.lower()
-                for test_word in ["test", "tests", "e2e", "testing"]
-            ):
+            # Check if the file is a test file based on common test directory patterns
+            path_lower = hunk.path.lower()
+            is_test = any(
+                test_word in path_lower
+                for test_word in ["test", "tests", "e2e", "testing", "spec", "specs", "__tests__"]
+            )
+            if is_test:
                 test_patch += str(hunk)
             else:
                 fix_patch += str(hunk)

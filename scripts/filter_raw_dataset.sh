@@ -16,15 +16,17 @@ function show_usage() {
     echo "  -i, --input-dir     Specify input directory path (contains *_raw_dataset.jsonl files)"
     echo "  -o, --output-dir    Specify output directory path"
     echo ""
-    echo "Filter options (must specify at least one):"
+    echo "Filter options:"
     echo "  -k, --keywords      Filter by (comma-separated keywords, search in title and body)"
     echo "  -c, --category      Filter by label/category (comma-separated categories)"
+    echo "  --skip-keyword      Skip keyword/category filtering (only filter by patch size)"
     echo ""
     echo "Optional arguments:"
     echo "  -m, --match-mode    Match mode: 'any' (default, match any) or 'all' (match all)"
     echo "  -s, --case-sensitive  Case sensitive (default is not case sensitive)"
-    echo "  -p, --min-patch-size  Specify minimum patch size (unit: bytes, default 0 no limit)"
+    echo "  -p, --min-patch-size  Specify minimum fix patch size (unit: bytes, default 0 no limit)"
     echo "  -pt, --min-test-patch-size Specify minimum test patch size (unit: bytes, default 0 no limit)"
+    echo "  --optional-test-patch  Make test patch optional (records without test patch will pass)"
     echo "  -h, --help          Show help information"
     echo ""
     echo "Examples:"
@@ -36,6 +38,12 @@ function show_usage() {
     echo ""
     echo "  # Use both keyword and category filter (must satisfy both)"
     echo "  $0 -i ./raw_ds -o ./filtered -k 'fix' -c 'bug' -m all"
+    echo ""
+    echo "  # Skip keyword/category filtering, only filter by patch size"
+    echo "  $0 -i ./raw_ds -o ./filtered --skip-keyword -p 100"
+    echo ""
+    echo "  # Require test patch but make it optional (records without test patch will pass)"
+    echo "  $0 -i ./raw_ds -o ./filtered --skip-keyword -pt 100 --optional-test-patch"
     echo ""
     exit 1
 }
@@ -49,6 +57,8 @@ MATCH_MODE="any"
 CASE_SENSITIVE=false
 MIN_PATCH_SIZE=0
 MIN_TEST_PATCH_SIZE=0
+SKIP_KEYWORD_FILTER=false
+OPTIONAL_TEST_PATCH=false
 
 # Parse command line parameters
 while [[ $# -gt 0 ]]; do
@@ -85,6 +95,14 @@ while [[ $# -gt 0 ]]; do
             MIN_TEST_PATCH_SIZE="$2"
             shift 2
             ;;
+        --skip-keyword)
+            SKIP_KEYWORD_FILTER=true
+            shift
+            ;;
+        --optional-test-patch)
+            OPTIONAL_TEST_PATCH=true
+            shift
+            ;;
         -h|--help)
             show_usage
             ;;
@@ -106,21 +124,22 @@ if [[ -z "$OUTPUT_DIR" ]]; then
     show_usage
 fi
 
-# If no filter conditions specified, provide interactive menu
-if [[ -z "$KEYWORDS" && -z "$CATEGORIES" ]]; then
+# If no filter conditions specified and not already skipping, provide interactive menu
+if [[ -z "$KEYWORDS" && -z "$CATEGORIES" && "$SKIP_KEYWORD_FILTER" == "false" ]]; then
     echo "============================================"
-    echo "No filter conditions detected, please select a preset category:"
+    echo "No filter conditions detected, please select an option:"
     echo "1. New Feature"
     echo "2. Bug Fix"
     echo "3. Edge Case & Robustness"
     echo "4. Performance Improvements"
     echo "5. Refactor"
-    echo "6. Exit"
+    echo "6. Skip keyword/category filtering (only filter by patch size)"
+    echo "7. Exit"
     echo "============================================"
 
     choice=""
-    while [[ ! "$choice" =~ ^[1-6]$ ]]; do
-        read -p "Please enter option [1-6]: " choice
+    while [[ ! "$choice" =~ ^[1-7]$ ]]; do
+        read -p "Please enter option [1-7]: " choice
     done
 
     case $choice in
@@ -129,13 +148,16 @@ if [[ -z "$KEYWORDS" && -z "$CATEGORIES" ]]; then
         3) CATEGORIES="edge case & robustness";;
         4) CATEGORIES="performance improvements";;
         5) CATEGORIES="refactor";;
-        6) exit 0;;
+        6) SKIP_KEYWORD_FILTER=true;;
+        7) exit 0;;
     esac
 
-    echo ""
-    read -p "Do you need additional keyword filtering? (press Enter to skip): " input_kw
-    if [[ -n "$input_kw" ]]; then
-        KEYWORDS="$input_kw"
+    if [[ "$SKIP_KEYWORD_FILTER" == "false" ]]; then
+        echo ""
+        read -p "Do you need additional keyword filtering? (press Enter to skip): " input_kw
+        if [[ -n "$input_kw" ]]; then
+            KEYWORDS="$input_kw"
+        fi
     fi
 fi
 
@@ -385,12 +407,17 @@ echo "Filtering JSONL files"
 echo "============================================"
 echo "Input directory: $INPUT_DIR"
 echo "Output directory: $OUTPUT_DIR"
-echo "Keywords: ${KEYWORDS:-none}"
-echo "Categories: ${CATEGORIES:-none}"
-echo "Match mode: $MATCH_MODE"
-echo "Case sensitive: $CASE_SENSITIVE"
-echo "Min patch size: $MIN_PATCH_SIZE"
+if [[ "$SKIP_KEYWORD_FILTER" == "true" ]]; then
+    echo "Keyword/Category filtering: SKIPPED"
+else
+    echo "Keywords: ${KEYWORDS:-none}"
+    echo "Categories: ${CATEGORIES:-none}"
+    echo "Match mode: $MATCH_MODE"
+    echo "Case sensitive: $CASE_SENSITIVE"
+fi
+echo "Min fix patch size: $MIN_PATCH_SIZE"
 echo "Min test patch size: $MIN_TEST_PATCH_SIZE"
+echo "Optional test patch: $OPTIONAL_TEST_PATCH"
 echo "============================================"
 
 # ============================================================================
@@ -488,9 +515,14 @@ if ! command -v jq &> /dev/null; then
     exit 1
 fi
 
-# Build filter expression
-JQ_FILTER=$(build_jq_filter)
-echo "JQ filter expression: $JQ_FILTER"
+# Build filter expression (only if not skipping)
+if [[ "$SKIP_KEYWORD_FILTER" == "true" ]]; then
+    JQ_FILTER=""
+    echo "JQ filter expression: (none - skipping keyword/category filtering)"
+else
+    JQ_FILTER=$(build_jq_filter)
+    echo "JQ filter expression: $JQ_FILTER"
+fi
 echo "============================================"
 
 # Statistics
@@ -520,8 +552,13 @@ for jsonl_file in "$INPUT_DIR"/*_raw_dataset.jsonl; do
     while IFS= read -r line; do
         [[ -z "$line" ]] && continue
 
-        # 1. First try JQ filtering
-        filtered_line=$(echo "$line" | jq -c "select($JQ_FILTER)")
+        # 1. Apply JQ filtering (if not skipped)
+        if [[ -n "$JQ_FILTER" ]]; then
+            filtered_line=$(echo "$line" | jq -c "select($JQ_FILTER)")
+        else
+            # No keyword/category filter, use line as-is
+            filtered_line="$line"
+        fi
 
         if [[ -n "$filtered_line" ]]; then
             # 2. If MIN_PATCH_SIZE limit exists, calculate patch size
@@ -547,7 +584,12 @@ for jsonl_file in "$INPUT_DIR"/*_raw_dataset.jsonl; do
                         pass_patch=false
                     fi
                 else
-                    pass_patch=false
+                    # No test patch content
+                    if [[ "$OPTIONAL_TEST_PATCH" == "false" ]]; then
+                        # Test patch is required, filter out
+                        pass_patch=false
+                    fi
+                    # If OPTIONAL_TEST_PATCH is true, pass_patch remains true
                 fi
             fi
 

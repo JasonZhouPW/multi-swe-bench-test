@@ -87,6 +87,13 @@ def get_parser() -> argparse.ArgumentParser:
         default=None,
         help="keywords to filter PRs, separated by commas.",
     )
+    parser.add_argument(
+        "--language",
+        type=str,
+        required=False,
+        default=None,
+        help="The programming language of the repository.",
+    )
     return parser
 
 
@@ -223,6 +230,7 @@ def search_prs_with_graphql(
     merged_after: Optional[str] = None,
     merged_before: Optional[str] = None,
     key_words: Optional[str] = None,
+    language: Optional[str] = None,
     max_results: int = 1000,
 ) -> List[Dict[str, Any]]:
     """
@@ -373,6 +381,7 @@ def search_prs_with_graphql(
                         "closed_at": node.get("closedAt"),
                         "merged_at": node.get("mergedAt"),
                         "merge_commit_sha": merge_commit.get("oid"),
+                        "language": language,
                         "commits": [
                             {
                                 "oid": merge_commit.get("oid", ""),
@@ -442,7 +451,7 @@ def search_prs_with_graphql(
 
 def get_correct_commit_hash(repo_path, pr_number, token):
     """
-    通过GitHub API获取PR的正确commit hash
+    通过GitHub API获取PR的正确commit hash (第一个commit的parent)
     """
     url = f"{GITHUB_API_BASE}/repos/{repo_path}/pulls/{pr_number}/commits"
 
@@ -464,7 +473,14 @@ def get_correct_commit_hash(repo_path, pr_number, token):
     response.raise_for_status()
 
     commits = response.json()
-    return commits[0]["parents"][0]["sha"]
+    if not commits or len(commits) == 0:
+        raise ValueError(f"No commits found for PR {pr_number}")
+
+    parents = commits[0].get("parents", [])
+    if not parents:
+        raise ValueError(f"No parent commits found for PR {pr_number}")
+
+    return parents[0]["sha"]
 
 
 def is_relevant_pull(pull, key_words: Optional[str] = None) -> bool:
@@ -500,6 +516,7 @@ def main(
     key_words: Optional[str] = None,
     merged_after: Optional[str] = None,
     merged_before: Optional[str] = None,
+    language: Optional[str] = None,
 ):
     print("starting get all pull requests using GraphQL")
     print(f"Input CSV: {input_csv}")
@@ -507,6 +524,7 @@ def main(
     print(f"Merged After: {merged_after}")
     print(f"Merged Before: {merged_before}")
     print(f"Key Words: {key_words}")
+    print(f"Language: {language}")
 
     import csv
 
@@ -541,6 +559,7 @@ def main(
             merged_after,
             merged_before,
             key_words,
+            language,
             max_results=1000,
         )
 
@@ -605,4 +624,5 @@ if __name__ == "__main__":
         args.key_words,
         args.merged_after,
         args.merged_before,
+        args.language,
     )

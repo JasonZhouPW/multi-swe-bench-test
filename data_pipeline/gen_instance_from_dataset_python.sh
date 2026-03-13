@@ -27,7 +27,13 @@ LINE=$(head -n 1 "$RAW_JSON")
 ORG=$(echo "$LINE" | sed -n 's/.*"org": *"\([^"]*\)".*/\1/p')
 REPO=$(echo "$LINE" | sed -n 's/.*"repo": *"\([^"]*\)".*/\1/p')
 LANG_RAW=$(echo "$LINE" | sed -n 's/.*"language": *"\([^"]*\)".*/\1/p')
-PR_BASE_SHA=$(echo "$LINE" | sed -n 's/.*"base":[^}]*"sha": *"\([^"]*\)".*/\1/p')
+
+# Prefer base_commit_hash over base.sha for more reliable SHA extraction
+PR_BASE_SHA=$(echo "$LINE" | sed -n 's/.*"base_commit_hash": *"\([^"]*\)".*/\1/p')
+if [ -z "$PR_BASE_SHA" ]; then
+    # Fallback to base.sha if base_commit_hash is not available
+    PR_BASE_SHA=$(echo "$LINE" | sed -n 's/.*"base":[^}]*"sha": *"\([^"]*\)".*/\1/p')
+fi
 
 if [ -z "$LANG_RAW" ]; then
     LANG_RAW="python"
@@ -206,7 +212,7 @@ git reset --hard
 bash /home/check_git_changes.sh
 echo "Git reset done"
 
-git checkout __BASE_SHA__
+git checkout {self.pr.base_commit_hash}
 bash /home/check_git_changes.sh
 echo "Git checkout done"
 
@@ -281,9 +287,14 @@ if ! command -v git >/dev/null 2>&1; then
 fi
 
 cd /home/[[REPO_NAME]]
-if ! git apply --whitespace=nowarn /home/test.patch 2>/dev/null; then
-    echo "Warning: git apply failed, trying alternative method..."
-    exit 1
+# Apply test.patch only if it exists and is not empty
+if [ -s /home/test.patch ]; then
+    if ! git apply --whitespace=nowarn /home/test.patch 2>/dev/null; then
+        echo "Warning: git apply test.patch failed, trying alternative method..."
+        exit 1
+    fi
+else
+    echo "No test.patch to apply (empty or missing)"
 fi
 coverage run -m pytest -v --tb=short --basetemp=/tmp tests/
 
@@ -307,9 +318,21 @@ if ! command -v git >/dev/null 2>&1; then
 fi
 
 cd /home/[[REPO_NAME]]
-if ! git apply --whitespace=nowarn /home/test.patch /home/fix.patch 2>/dev/null; then
-    echo "Warning: git apply failed, trying alternative method..."
-    exit 1
+# Apply patches: test.patch (if exists) and fix.patch
+if [ -s /home/test.patch ]; then
+    if ! git apply --whitespace=nowarn /home/test.patch /home/fix.patch 2>/dev/null; then
+        echo "Warning: git apply both patches failed, trying fix.patch only..."
+        if ! git apply --whitespace=nowarn /home/fix.patch 2>/dev/null; then
+            echo "Warning: git apply fix.patch also failed"
+            exit 1
+        fi
+    fi
+else
+    # No test.patch, only apply fix.patch
+    if ! git apply --whitespace=nowarn /home/fix.patch 2>/dev/null; then
+        echo "Warning: git apply fix.patch failed"
+        exit 1
+    fi
 fi
 coverage run -m pytest -v --tb=short --basetemp=/tmp tests/
 
@@ -423,12 +446,11 @@ perl -0777 -i.bak -pe '
 
 echo "✅ Injected setup commands from $EXTRA_JSON"
 ###################################################
-# Inject org/repo/base_sha into template
+# Inject org/repo into template
 ###################################################
-# Replace placeholder {{ORG}} {{REPO}} __BASE_SHA__
+# Replace placeholder {{ORG}} {{REPO}}
 sed -i "" "s/{{ORG}}/$ORG/g"  "$TARGET_FILE" 2>/dev/null || sed -i "s/{{ORG}}/$ORG/g" "$TARGET_FILE"
 sed -i "" "s/{{REPO}}/$REPO/g" "$TARGET_FILE" 2>/dev/null || sed -i "s/{{REPO}}/$REPO/g" "$TARGET_FILE"
-sed -i "" "s/__BASE_SHA__/$PR_BASE_SHA/g" "$TARGET_FILE" 2>/dev/null || sed -i "s/__BASE_SHA__/$PR_BASE_SHA/g" "$TARGET_FILE"
 
 rm -f "$TARGET_FILE.bak"
 

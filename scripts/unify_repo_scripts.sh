@@ -103,7 +103,7 @@ for RAW_FILE in "${FILES[@]}"; do
     fi
     if [ -z "$LANG_RAW" ]; then
         echo "no language found"
-        return
+        continue
     fi
     echo "🔍 Detected language: $LANG_RAW"
     GEN_INSTANCE="$SCRIPT_DIR/../data_pipeline/gen_instance_from_dataset_${LANG_RAW}.sh"

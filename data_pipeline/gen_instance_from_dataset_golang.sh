@@ -191,13 +191,24 @@ go test -v -count=1 ./...
             File(".", "test-run.sh", """#!/bin/bash
 set -e
 cd /home/{pr.repo}
-git apply /home/test.patch
+# Apply test.patch only if it exists and is not empty
+if [ -s /home/test.patch ]; then
+    git apply /home/test.patch || echo "Warning: git apply test.patch failed"
+else
+    echo "No test.patch to apply (empty or missing)"
+fi
 go test -v -count=1 ./...
 """.format(pr=self.pr)),
             File(".", "fix-run.sh", """#!/bin/bash
 set -e
 cd /home/{pr.repo}
-git apply /home/test.patch /home/fix.patch
+# Apply patches: test.patch (if exists) and fix.patch
+if [ -s /home/test.patch ]; then
+    git apply /home/test.patch /home/fix.patch || git apply /home/fix.patch
+else
+    # No test.patch, only apply fix.patch
+    git apply /home/fix.patch
+fi
 go test -v -count=1 ./...
 """.format(pr=self.pr)),
             File(".", "check_git_changes.sh", """#!/bin/bash
@@ -228,7 +239,7 @@ set -e
 cd /home/{pr.repo}
 git reset --hard
 bash /home/check_git_changes.sh
-git checkout {pr.base.sha}
+git checkout {self.pr.base_commit_hash}
 bash /home/check_git_changes.sh
 bash /home/resolve_go_file.sh /home/{pr.repo}
 

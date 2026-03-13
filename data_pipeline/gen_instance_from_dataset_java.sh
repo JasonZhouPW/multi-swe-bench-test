@@ -336,7 +336,7 @@ set -e
 cd /home/{pr.repo}
 git reset --hard
 bash /home/check_git_changes.sh
-git checkout {pr.base.sha}
+git checkout {self.pr.base_commit_hash}
 bash /home/check_git_changes.sh
 
 # Injected setup commands
@@ -371,15 +371,16 @@ fi
 set -e
 
 cd /home/{pr.repo}
-echo "DEBUG: git status before apply:"
-git status
-echo "DEBUG: applying patch verbose:"
-git apply --verbose --whitespace=nowarn /home/test.patch || {{
-    echo "APPLY FAILED"
-    echo "DEBUG: File content around line 30:"
-    head -n 50 gson/src/test/java/com/google/gson/functional/DefaultTypeAdaptersTest.java
-    exit 1
-}}
+# Apply test.patch only if it exists and is not empty
+if [ -s /home/test.patch ]; then
+    echo "DEBUG: applying test.patch:"
+    git apply --verbose --whitespace=nowarn /home/test.patch || {{
+        echo "APPLY FAILED"
+        exit 1
+    }}
+else
+    echo "No test.patch to apply (empty or missing)"
+fi
 if [ -f "pom.xml" ]; then
     mvn clean test -Dmaven.test.skip=false -DfailIfNoTests=false --batch-mode
 else
@@ -395,7 +396,13 @@ fi
 set -e
 
 cd /home/{pr.repo}
-git apply --whitespace=nowarn /home/test.patch /home/fix.patch
+# Apply patches: test.patch (if exists) and fix.patch
+if [ -s /home/test.patch ]; then
+    git apply --whitespace=nowarn /home/test.patch /home/fix.patch || git apply --whitespace=nowarn /home/fix.patch
+else
+    # No test.patch, only apply fix.patch
+    git apply --whitespace=nowarn /home/fix.patch
+fi
 if [ -f "pom.xml" ]; then
     mvn clean test -Dmaven.test.skip=false -DfailIfNoTests=false --batch-mode
 else

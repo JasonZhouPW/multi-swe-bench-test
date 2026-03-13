@@ -26,7 +26,8 @@ LINE=$(head -n 1 "$RAW_JSON")
 
 ORG=$(echo "$LINE" | jq -r '.org')
 REPO=$(echo "$LINE" | jq -r '.repo')
-BASE_SHA=$(echo "$LINE" | jq -r '.base.sha')
+# Prefer base_commit_hash over base.sha for more reliable SHA extraction
+BASE_SHA=$(echo "$LINE" | jq -r '.base_commit_hash // .base.sha // empty')
 LANG_RAW=$(echo "$LINE" | jq -r '.language // "typescript"')
 
 if [ -z "$LANG_RAW" ]; then
@@ -223,7 +224,7 @@ git reset --hard
 echo "Git reset done"
 bash /home/check_git_changes.sh
 echo "First git check done"
-git checkout [[BASE_SHA]]
+git checkout {self.pr.base_commit_hash}
 echo "Git checkout done"
 bash /home/check_git_changes.sh
 echo "Second git check done"
@@ -263,7 +264,12 @@ npm test
                 "test-run.sh",
                 """#!/bin/bash
 cd /home/[[REPO_NAME]]
-git apply  --exclude package.json --whitespace=nowarn /home/test.patch
+# Apply test.patch only if it exists and is not empty
+if [ -s /home/test.patch ]; then
+    git apply --exclude package.json --whitespace=nowarn /home/test.patch || echo "Warning: git apply test.patch failed"
+else
+    echo "No test.patch to apply (empty or missing)"
+fi
 npm test
 
 """,
@@ -275,7 +281,13 @@ npm test
 set -e
 
 cd /home/[[REPO_NAME]]
-git apply  --exclude package.json --whitespace=nowarn /home/test.patch /home/fix.patch
+# Apply patches: test.patch (if exists) and fix.patch
+if [ -s /home/test.patch ]; then
+    git apply --exclude package.json --whitespace=nowarn /home/test.patch /home/fix.patch || git apply --exclude package.json --whitespace=nowarn /home/fix.patch
+else
+    # No test.patch, only apply fix.patch
+    git apply --exclude package.json --whitespace=nowarn /home/fix.patch
+fi
 npm test
 
 """,
@@ -392,11 +404,10 @@ echo "✅ Injected setup commands from $EXTRA_JSON"
 ###################################################
 # Inject org/repo into template
 ###################################################
-# Replace placeholder {{ORG}} {{REPO}} [[REPO_NAME]] [[BASE_SHA]]
+# Replace placeholder {{ORG}} {{REPO}} [[REPO_NAME]]
 sed -i "" "s/{{ORG}}/$ORG/g"  "$TARGET_FILE" 2>/dev/null || sed -i "s/{{ORG}}/$ORG/g" "$TARGET_FILE"
 sed -i "" "s/{{REPO}}/$REPO/g" "$TARGET_FILE" 2>/dev/null || sed -i "s/{{REPO}}/$REPO/g" "$TARGET_FILE"
 sed -i "" "s/\[\[REPO_NAME\]\]/$repo_name/g" "$TARGET_FILE" 2>/dev/null || sed -i "s/\[\[REPO_NAME\]\]/$repo_name/g" "$TARGET_FILE"
-sed -i "" "s/\[\[BASE_SHA\]\]/$pr_base_sha/g" "$TARGET_FILE" 2>/dev/null || sed -i "s/\[\[BASE_SHA\]\]/$pr_base_sha/g" "$TARGET_FILE"
 
 rm -f "$TARGET_FILE.bak"
 

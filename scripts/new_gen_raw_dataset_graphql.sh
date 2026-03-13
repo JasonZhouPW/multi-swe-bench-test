@@ -146,12 +146,18 @@ if [ -n "$KEYWORDS" ]; then
     KEY_WORDS_ARGS="--key_words $KEYWORDS"
 fi
 
+LANGUAGE_ARGS=""
+if [ -n "$LANGUAGE" ]; then
+    LANGUAGE_ARGS="--language $LANGUAGE"
+fi
+
 $PYTHON_CMD "$PROJ_ROOT/multi_swe_bench/collect/new_fetch_prs_graphql.py" \
     --input "$REPOS_CSV" \
     --output-dir "$OUTPUT_DIR" \
     $MERGED_ARGS \
     $TOKEN_ARGS \
-    $KEY_WORDS_ARGS
+    $KEY_WORDS_ARGS \
+    $LANGUAGE_ARGS
 
 # Check if any filtered PRs files were created
 PR_FILES=$(ls "$OUTPUT_DIR"/*_filtered_prs.jsonl 2>/dev/null | wc -l)

@@ -119,6 +119,7 @@ while true; do
             mkdir -p "$output_dir"
 
             echo -e "${CYAN}Please specify filter options:${NC}"
+            echo -e "${CYAN}(Leave both keywords and categories empty to skip keyword/category filtering)${NC}"
             read -rep "Keywords (comma-separated, optional): " keywords
             read -rep "Categories (comma-separated, optional): " categories
             read -rep "Match mode (any/all, default: any): " match_mode
@@ -127,6 +128,16 @@ while true; do
             min_patch_size=${min_patch_size:-0}
             read -rep "Min test patch size (bytes, default: 0): " min_test_patch_size
             min_test_patch_size=${min_test_patch_size:-0}
+            if [ "$min_test_patch_size" -gt 0 ]; then
+                read -rep "Make test patch optional? (y/n, default: n): " optional_test
+                if [ "$optional_test" = "y" ] || [ "$optional_test" = "Y" ]; then
+                    optional_test_patch=true
+                else
+                    optional_test_patch=false
+                fi
+            else
+                optional_test_patch=false
+            fi
 
             CMD="bash \"$SCRIPTS_DIR/filter_raw_dataset.sh\" -i \"$input_dir\" -o \"$output_dir\""
 
@@ -136,6 +147,10 @@ while true; do
             if [ -n "$categories" ]; then
                 CMD="$CMD -c \"$categories\""
             fi
+            # If both keywords and categories are empty, add --skip-keyword flag
+            if [ -z "$keywords" ] && [ -z "$categories" ]; then
+                CMD="$CMD --skip-keyword"
+            fi
             if [ -n "$match_mode" ] && [ "$match_mode" != "any" ]; then
                 CMD="$CMD -m \"$match_mode\""
             fi
@@ -144,6 +159,9 @@ while true; do
             fi
             if [ "$min_test_patch_size" -gt 0 ]; then
                 CMD="$CMD -pt \"$min_test_patch_size\""
+            fi
+            if [ "$optional_test_patch" = "true" ]; then
+                CMD="$CMD --optional-test-patch"
             fi
 
             echo -e "${CYAN}Executing: $CMD${NC}"
