@@ -35,6 +35,29 @@ def load_github_token(token_file="./tokens.txt"):
         return None
 
 
+def check_commit_exists_in_repo(org, repo, commit_hash, token):
+    """
+    Check if a commit exists in the repository via GitHub API
+    """
+    url = f"{GITHUB_API_BASE}/repos/{org}/{repo}/commits/{commit_hash}"
+
+    headers = HEADERS.copy()
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    response = requests.get(url, headers=headers)
+
+    # Handle rate limiting
+    if response.status_code == 429:
+        reset_time = int(response.headers.get("X-RateLimit-Reset", time.time() + 60))
+        sleep_time = max(reset_time - int(time.time()), 0) + 1
+        print(f"Rate limited. Sleeping for {sleep_time} seconds...")
+        time.sleep(sleep_time)
+        return check_commit_exists_in_repo(org, repo, commit_hash, token)
+
+    return response.status_code == 200
+
+
 def get_correct_commit_hash(org, repo, pr_number, token):
     """
     通过GitHub API获取PR的正确commit hash (第一个commit的parent)
@@ -62,11 +85,11 @@ def get_correct_commit_hash(org, repo, pr_number, token):
     commits = response.json()
     if not commits or len(commits) == 0:
         raise ValueError(f"No commits found for PR {pr_number}")
-    
+
     parents = commits[0].get("parents", [])
     if not parents:
         raise ValueError(f"No parent commits found for PR {pr_number}")
-    
+
     return parents[0]["sha"]
 
 
@@ -92,7 +115,7 @@ def process_jsonl_file(file_path, token):
                 org = data.get("org")
                 repo = data.get("repo")
                 pr_number = data.get("number")
-                
+
                 if not org or not repo or not pr_number:
                     print(f"Warning: Missing org/repo/number in line {line_num}")
                     lines.append(line)
@@ -102,7 +125,7 @@ def process_jsonl_file(file_path, token):
 
                 # 获取当前的base_commit_hash值
                 old_hash = data.get("base_commit_hash")
-                
+
                 # 检查base.sha是否存在
                 # base_obj = data.get("base")
                 # base_sha = base_obj.get("sha") if isinstance(base_obj, dict) else None
@@ -111,26 +134,44 @@ def process_jsonl_file(file_path, token):
                     correct_hash = get_correct_commit_hash(org, repo, pr_number, token)
 
                     # 检查是否需要更新
-                    needs_update = (old_hash != correct_hash) 
+                    needs_update = (old_hash != correct_hash)
 
                     if needs_update:
                         # 更新base_commit_hash字段
                         print(f"Updating {record_id}: base_commit_hash {old_hash} -> {correct_hash}")
                         data["base_commit_hash"] = correct_hash
-                        
+
                         # 同步更新base.sha
                         # if isinstance(base_obj, dict):
                         #     print(f"Updating {record_id}: base.sha {base_sha} -> {correct_hash}")
                         #     base_obj["sha"] = correct_hash
-                        
+
                         modified_count += 1
                         print(f"Successfully updated {record_id}")
 
-                        # 将更新后的数据写回
+                    # 检查merge_commit_sha是否存在
+                    merge_commit_sha = data.get("merge_commit_sha")
+                    if merge_commit_sha:
+                        if not check_commit_exists_in_repo(org, repo, merge_commit_sha, token):
+                            print(f"Clearing {record_id}: merge_commit_sha {merge_commit_sha} doesn't exist in repo")
+                            data["merge_commit_sha"] = None
+                            # Also clear commits array if it contains the non-existent merge commit
+                            commits = data.get("commits", [])
+                            if commits and isinstance(commits, list):
+                                # Filter out commits with the non-existent SHA
+                                original_count = len(commits)
+                                commits = [c for c in commits if c.get("oid") != merge_commit_sha]
+                                if len(commits) < original_count:
+                                    data["commits"] = commits
+                                    print(f"  Also cleared {original_count - len(commits)} non-existent commit(s) from commits array")
+                            modified_count += 1
+                        else:
+                            print(f"Skipping {record_id}: merge_commit_sha exists ({merge_commit_sha[:8]}...)")
+
+                    # 将更新后的数据写回
+                    if needs_update or (merge_commit_sha and not data.get("merge_commit_sha")):
                         lines.append(json.dumps(data, ensure_ascii=False) + "\n")
                     else:
-                        # 已经一致，保持原样
-                        print(f"Skipping {record_id}: already correct ({correct_hash[:8]}...)")
                         lines.append(line)
 
                 except Exception as e:
