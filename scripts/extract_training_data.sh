@@ -6,6 +6,10 @@
 # If input_path is a directory: process all .jsonl files in that directory
 # All data is merged into a single output file
 # Output format matches training_template.json structure
+#
+# Supports two JSONL formats:
+# 1. Multi-SWE-Bench format: org, repo, number, title, body, fix_patch
+# 2. SWE-Oracle format: instance_id, repo, problem_statement, patch
 
 set -e
 
@@ -15,9 +19,12 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# Default paths
+# Get project root directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DEFAULT_INPUT="${SCRIPT_DIR}/sample_raw_dataset.json"
+PROJ_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Default paths
+DEFAULT_INPUT="${PROJ_ROOT}/swe_oracle"
 DEFAULT_OUTPUT="${SCRIPT_DIR}/training_dataset.json"
 
 # Get arguments
@@ -68,27 +75,49 @@ process_file() {
             continue
         fi
 
-        # Extract fields using jq
-        org=$(echo "$line" | jq -r '.org')
-        repo=$(echo "$line" | jq -r '.repo')
-        number=$(echo "$line" | jq -r '.number')
-        title=$(echo "$line" | jq -r '.title')
-        body=$(echo "$line" | jq -r '.body')
-        fix_patch=$(echo "$line" | jq -r '.fix_patch')
+        # Extract fields using jq - support both formats
+        # Format 1: Multi-SWE-Bench (org, repo, number, title, body, fix_patch)
+        # Format 2: SWE-Oracle (instance_id, repo, problem_statement, patch)
 
-        # Skip if fix_patch is null or empty
-        if [ "$fix_patch" = "null" ] || [ -z "$fix_patch" ]; then
-            echo -e "${YELLOW}Skipping PR #$number: No fix_patch available${NC}"
+        org=$(echo "$line" | jq -r '.org // empty')
+        repo=$(echo "$line" | jq -r '.repo // empty')
+        number=$(echo "$line" | jq -r '.number // empty')
+        title=$(echo "$line" | jq -r '.title // empty')
+        body=$(echo "$line" | jq -r '.body // empty')
+        instance_id=$(echo "$line" | jq -r '.instance_id // empty')
+        problem_statement=$(echo "$line" | jq -r '.problem_statement // empty')
+
+        # Try fix_patch first, fall back to patch if not available
+        patch=$(echo "$line" | jq -r '.fix_patch // empty')
+        if [ -z "$patch" ] || [ "$patch" = "null" ]; then
+            patch=$(echo "$line" | jq -r '.patch // empty')
+        fi
+
+        # Skip if no patch available
+        if [ -z "$patch" ] || [ "$patch" = "null" ]; then
+            echo -e "${YELLOW}Skipping: No patch available${NC}"
             continue
         fi
 
-        # Construct user content (GitHub link + title + body)
-        github_link="https://github.com/${org}/${repo}/pull/${number}"
-        user_content="<github link>${github_link}</github link>\n\n<title>${title}</title>\n\n<description>${body}</description>"
+        # Determine format and construct user content accordingly
+        if [ -n "$org" ] && [ -n "$number" ]; then
+            # Multi-SWE-Bench format
+            github_link="https://github.com/${org}/${repo}/pull/${number}"
+            user_content="<github link>${github_link}</github link>\n\n<title>${title}</title>\n\n<description>${body}</description>"
+        elif [ -n "$instance_id" ]; then
+            # SWE-Oracle format
+            org=$(echo "$repo" | cut -d'/' -f1)
+            repo_name=$(echo "$repo" | cut -d'/' -f2)
+            github_link="https://github.com/${repo}"
+            user_content="<github link>${github_link}</github link>\n\n<instance_id>${instance_id}</instance_id>\n\n<problem_statement>${problem_statement}</problem_statement>"
+        else
+            echo -e "${YELLOW}Skipping: Unknown format${NC}"
+            continue
+        fi
 
         # Escape content for JSON
         user_content_escaped=$(echo "$user_content" | jq -Rs .)
-        fix_patch_escaped=$(echo "$fix_patch" | jq -Rs .)
+        patch_escaped=$(echo "$patch" | jq -Rs .)
 
         # Handle JSON array structure
         if [ "$is_first_file" = true ] && [ "$first" = true ]; then
@@ -99,9 +128,9 @@ process_file() {
             echo "," >> "$output_file"
         fi
         # Construct reverse user content (Patch + Question)
-        reverse_user_content="Patch:\n${fix_patch}\n\nQuestion:\n${QUESTION}"
+        reverse_user_content="Patch:\n${patch}\n\nQuestion:\n${QUESTION}"
         reverse_user_content_escaped=$(echo "$reverse_user_content" | jq -Rs .)
-        
+
 
 
 
@@ -111,7 +140,7 @@ process_file() {
         "messages": [
             { "role": "system", "content": "You are a senior software engineer specializing in code refactoring." },
             {"role": "user", "content": ${user_content_escaped}},
-            {"role": "assistant", "content": ${fix_patch_escaped}}
+            {"role": "assistant", "content": ${patch_escaped}}
         ]
     },{
         "messages": [
