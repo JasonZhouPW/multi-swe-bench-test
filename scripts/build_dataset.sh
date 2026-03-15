@@ -97,7 +97,7 @@ while IFS= read -r LINE; do
     "need_clone": false,
     "global_env": [],
     "clear_env": true,
-    "stop_on_error": true,
+    "stop_on_error": false,
     "max_workers": 2,
     "max_workers_build_image": 8,
     "max_workers_run_instance": 8,

@@ -132,7 +132,7 @@ def get_parser() -> ArgumentParser:
         "--stop_on_error",
         type=parser.bool,
         required=False,
-        default=True,
+        default=False,
         help="Whether to stop on error.",
     )
     parser.add_argument(
