@@ -157,7 +157,7 @@ for RAW_FILE in "${FILES[@]}"; do
     fi
     # --------------------------------
 
-    "$SCRIPT_DIR/../data_pipeline/build_dataset.sh" "$RAW_FILE" 
+    "$SCRIPT_DIR/../data_pipeline/build_dataset.sh" "$RAW_FILE" || true 
 
     ##########################################
     # Derive dataset filename (multiple entries merged in one file)

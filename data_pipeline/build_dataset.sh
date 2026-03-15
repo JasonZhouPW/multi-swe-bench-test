@@ -165,12 +165,12 @@ EOF
         FAIL_COUNT=$((FAIL_COUNT + 1))
 
         # Extract detailed error reasons from build output
-        ERROR_COMMIT=$(echo "$BUILD_OUTPUT" | grep -E "Commit hash not found" | head -1)
-        ERROR_IMAGE=$(echo "$BUILD_OUTPUT" | grep -E "Error building image" | head -1)
-        ERROR_DOCKER=$(echo "$BUILD_OUTPUT" | grep -E "Docker build failed" | head -1)
-        ERROR_RUN=$(echo "$BUILD_OUTPUT" | grep -E "Error running instance" | head -1)
-        ERROR_COPY=$(echo "$BUILD_OUTPUT" | grep -E "No such file or directory" | head -1)
-        ERROR_GENERAL=$(echo "$BUILD_OUTPUT" | grep -E "^\[ERROR\]" | head -1)
+        ERROR_COMMIT=$(echo "$BUILD_OUTPUT" | grep -E "Commit hash not found" | head -1 || true)
+        ERROR_IMAGE=$(echo "$BUILD_OUTPUT" | grep -E "Error building image" | head -1 || true)
+        ERROR_DOCKER=$(echo "$BUILD_OUTPUT" | grep -E "Docker build failed" | head -1 || true)
+        ERROR_RUN=$(echo "$BUILD_OUTPUT" | grep -E "Error running instance" | head -1 || true)
+        ERROR_COPY=$(echo "$BUILD_OUTPUT" | grep -E "No such file or directory" | head -1 || true)
+        ERROR_GENERAL=$(echo "$BUILD_OUTPUT" | grep -E "^\[ERROR\]" | head -1 || true)
 
         # Determine primary error reason
         ERROR_REASON=""
@@ -216,6 +216,13 @@ rm -rf "$TEMP_DIR"
 ##########################################
 END_TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
 
+# Calculate success rate
+if [ "$TOTAL_COUNT" -gt 0 ]; then
+    SUCCESS_RATE=$(echo "scale=1; $SUCCESS_COUNT * 100 / $TOTAL_COUNT" | bc)
+else
+    SUCCESS_RATE="0.0"
+fi
+
 echo "" >> "$PROCESSING_LOG"
 echo "========================================" >> "$PROCESSING_LOG"
 echo "Summary" >> "$PROCESSING_LOG"
@@ -224,11 +231,11 @@ echo "Finished: $END_TIMESTAMP" >> "$PROCESSING_LOG"
 echo "Total records: $TOTAL_COUNT" >> "$PROCESSING_LOG"
 echo "Successful: $SUCCESS_COUNT" >> "$PROCESSING_LOG"
 echo "Failed: $FAIL_COUNT" >> "$PROCESSING_LOG"
-echo "Success rate: $(awk "BEGIN {printf \"%.1f%%\", ($SUCCESS_COUNT/($TOTAL_COUNT>0?$TOTAL_COUNT:1))*100}")" >> "$PROCESSING_LOG"
+echo "Success rate: ${SUCCESS_RATE}%" >> "$PROCESSING_LOG"
 
 echo "======================================="
 echo "🎉 Multi-record dataset build completed"
 echo "📦 Output file: $FINAL_OUTPUT"
 echo "📝 Processing log: $PROCESSING_LOG"
-echo "📊 Summary: $SUCCESS_COUNT/$TOTAL_COUNT records succeeded ($(awk "BEGIN {printf \"%.1f%%\", ($SUCCESS_COUNT/($TOTAL_COUNT>0?$TOTAL_COUNT:1))*100}"))"
+echo "📊 Summary: $SUCCESS_COUNT/$TOTAL_COUNT records succeeded (${SUCCESS_RATE}%)"
 echo "======================================="
