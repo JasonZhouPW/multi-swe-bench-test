@@ -143,10 +143,10 @@ EOF
 
     RECORD_END=$(date '+%Y-%m-%d %H:%M:%S')
 
-    if [ -f "$SINGLE_OUT" ]; then
+    # Check if the report was generated (look for report.json in workdir)
+    REPORT_FILE="$WORKDIR/${PR_ORG}/${PR_REPO}/instances/pr-${PR_NUMBER}/report.json"
+    if [ -f "$REPORT_FILE" ]; then
         echo "✅ Success: record #$index ($PR_ID)"
-        cat "$SINGLE_OUT" >> "$FINAL_OUTPUT"
-        rm -f "$SINGLE_OUT"
         SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
 
         # Log success

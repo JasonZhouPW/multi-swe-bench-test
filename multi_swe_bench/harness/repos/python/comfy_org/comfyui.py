@@ -136,7 +136,7 @@ echo 'coverage run -m pytest -v --tb=short --basetemp=/tmp tests/' > test_comman
 
 cat test_commands.sh
 ###ACTION_DELIMITER###
-bash test_commands.sh || true""".replace("[[REPO_NAME]]", repo_name).replace("{self.pr.base_commit_hash}", self.pr.base_commit_hash),
+bash test_commands.sh || true""".replace("[[REPO_NAME]]", repo_name),
             ),
             File(
                 ".",
