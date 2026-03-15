@@ -120,7 +120,7 @@ EOF
     # Execute single build
     ##########################################
     echo "🚀 Running dataset builder for record #$index..."
-    python -m multi_swe_bench.harness.build_dataset --config "$CONFIG_FILE"
+    python -m multi_swe_bench.harness.build_dataset --config "$CONFIG_FILE" || echo "⚠️ Record #$index failed, continuing..."
 
     if [ -f "$SINGLE_OUT" ]; then
         echo "📌 Appending #$index → $FINAL_OUTPUT"
