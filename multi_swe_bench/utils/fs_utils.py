@@ -40,4 +40,27 @@ def copy_source_code(source_code_dir: Path, image: Image, dst_dir: Path):
     if os.path.exists(destination_path):
         shutil.rmtree(destination_path, onerror=remove_readonly)
 
-    shutil.copytree(source_code_path, destination_path)
+    # Custom copy function that handles broken symlinks
+    def copy_tree_with_broken_symlink_handling(src, dst):
+        """Copy directory tree, skipping broken symlinks."""
+        os.makedirs(dst, exist_ok=True)
+        for item in os.listdir(src):
+            src_item = os.path.join(src, item)
+            dst_item = os.path.join(dst, item)
+            try:
+                if os.path.islink(src_item):
+                    # Check if symlink target exists
+                    link_target = os.readlink(src_item)
+                    if os.path.exists(os.path.join(os.path.dirname(src_item), link_target)):
+                        # Valid symlink - copy it
+                        os.symlink(link_target, dst_item)
+                    # else: broken symlink - skip it
+                elif os.path.isdir(src_item):
+                    copy_tree_with_broken_symlink_handling(src_item, dst_item)
+                else:
+                    shutil.copy2(src_item, dst_item)
+            except (OSError, IOError) as e:
+                # Skip items that can't be copied (e.g., permission issues)
+                pass
+
+    copy_tree_with_broken_symlink_handling(str(source_code_path), str(destination_path))

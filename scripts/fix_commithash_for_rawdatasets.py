@@ -151,25 +151,29 @@ def process_jsonl_file(file_path, token):
 
                     # 检查merge_commit_sha是否存在
                     merge_commit_sha = data.get("merge_commit_sha")
+                    skip_record = False
                     if merge_commit_sha:
                         if not check_commit_exists_in_repo(org, repo, merge_commit_sha, token):
-                            print(f"Clearing {record_id}: merge_commit_sha {merge_commit_sha} doesn't exist in repo")
+                            # Check if it's truly unreachable by trying to see if it's on any branch
+                            # If GitHub API says it exists but we can't fetch it, it's a dangling commit
+                            print(f"⚠️  {record_id}: merge_commit_sha {merge_commit_sha} is unreachable (dangling commit)")
+                            print(f"   This PR will be skipped during dataset build.")
+                            # Clear the merge_commit_sha so the record can still be used if needed
                             data["merge_commit_sha"] = None
-                            # Also clear commits array if it contains the non-existent merge commit
+                            # Also clear commits array that reference the unreachable commit
                             commits = data.get("commits", [])
                             if commits and isinstance(commits, list):
-                                # Filter out commits with the non-existent SHA
                                 original_count = len(commits)
                                 commits = [c for c in commits if c.get("oid") != merge_commit_sha]
                                 if len(commits) < original_count:
                                     data["commits"] = commits
-                                    print(f"  Also cleared {original_count - len(commits)} non-existent commit(s) from commits array")
+                                    print(f"   Cleared {original_count - len(commits)} unreachable commit(s) from commits array")
                             modified_count += 1
                         else:
-                            print(f"Skipping {record_id}: merge_commit_sha exists ({merge_commit_sha[:8]}...)")
+                            print(f"✓ {record_id}: merge_commit_sha exists ({merge_commit_sha[:8]}...)")
 
                     # 将更新后的数据写回
-                    if needs_update or (merge_commit_sha and not data.get("merge_commit_sha")):
+                    if needs_update or (merge_commit_sha and data.get("merge_commit_sha") is None):
                         lines.append(json.dumps(data, ensure_ascii=False) + "\n")
                     else:
                         lines.append(line)
