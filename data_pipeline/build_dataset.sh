@@ -144,6 +144,7 @@ EOF
     # Execute single build
     ##########################################
     echo "🚀 Running dataset builder for record #$index..."
+    echo "   PR: $PR_ID"
 
     # Capture output and exit code
     BUILD_OUTPUT=$(python -m multi_swe_bench.harness.build_dataset --config "$CONFIG_FILE" 2>&1)
@@ -160,18 +161,49 @@ EOF
         # Log success
         echo "[$RECORD_END] ✅ SUCCESS | $PR_ID | Record #$index" >> "$PROCESSING_LOG"
     else
-        echo "⚠️ Failed: record #$index ($PR_ID)"
+        echo "❌ Failed: record #$index ($PR_ID)"
         FAIL_COUNT=$((FAIL_COUNT + 1))
 
-        # Extract error reason from build output
-        ERROR_REASON=$(echo "$BUILD_OUTPUT" | grep -E "(ERROR|Error|failed|Failed)" | head -3 | tr '\n' ' | ' | cut -c1-200)
-        if [ -z "$ERROR_REASON" ]; then
+        # Extract detailed error reasons from build output
+        ERROR_COMMIT=$(echo "$BUILD_OUTPUT" | grep -E "Commit hash not found" | head -1)
+        ERROR_IMAGE=$(echo "$BUILD_OUTPUT" | grep -E "Error building image" | head -1)
+        ERROR_DOCKER=$(echo "$BUILD_OUTPUT" | grep -E "Docker build failed" | head -1)
+        ERROR_RUN=$(echo "$BUILD_OUTPUT" | grep -E "Error running instance" | head -1)
+        ERROR_COPY=$(echo "$BUILD_OUTPUT" | grep -E "No such file or directory" | head -1)
+        ERROR_GENERAL=$(echo "$BUILD_OUTPUT" | grep -E "^\[ERROR\]" | head -1)
+
+        # Determine primary error reason
+        ERROR_REASON=""
+        if [ -n "$ERROR_COMMIT" ]; then
+            ERROR_REASON="Commit hash not found: $(echo "$ERROR_COMMIT" | sed 's/.*Commit hash not found.*/Commit hash not found/')"
+            echo "   ⚠️  Reason: Commit hash not found in repository"
+        elif [ -n "$ERROR_IMAGE" ]; then
+            ERROR_REASON="Image build failed: $(echo "$ERROR_IMAGE" | sed 's/.*Error building image //' | cut -c1-80)"
+            echo "   ⚠️  Reason: Docker image build failed"
+        elif [ -n "$ERROR_DOCKER" ]; then
+            ERROR_REASON="Docker build failed: $(echo "$ERROR_DOCKER" | sed 's/.*returned a non-zero code.*/Docker build error/' | cut -c1-80)"
+            echo "   ⚠️  Reason: Docker build returned non-zero code"
+        elif [ -n "$ERROR_RUN" ]; then
+            ERROR_REASON="Instance run failed: $(echo "$ERROR_RUN" | sed 's/.*Error running instance //' | cut -c1-80)"
+            echo "   ⚠️  Reason: Instance execution failed"
+        elif [ -n "$ERROR_COPY" ]; then
+            ERROR_REASON="File not found: $(echo "$ERROR_COPY" | sed 's/.*No such file or directory.*/Missing file/' | cut -c1-80)"
+            echo "   ⚠️  Reason: Missing file during copy"
+        elif [ -n "$ERROR_GENERAL" ]; then
+            ERROR_REASON="$ERROR_GENERAL"
+            echo "   ⚠️  Reason: $ERROR_GENERAL"
+        else
             ERROR_REASON="Unknown error (no output file generated)"
+            echo "   ⚠️  Reason: Unknown - no dataset file generated"
         fi
 
-        # Log failure with reason
+        # Log failure with detailed reason
         echo "[$RECORD_END] ❌ FAILED | $PR_ID | Record #$index | $ERROR_REASON" >> "$PROCESSING_LOG"
     fi
+
+    # Show progress
+    echo ""
+    echo "📊 Progress: $((index + 1))/$LINE_COUNT | ✅ $SUCCESS_COUNT | ❌ $FAIL_COUNT"
 
     index=$((index + 1))
     echo ""
