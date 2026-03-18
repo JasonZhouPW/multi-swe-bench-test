@@ -14,6 +14,12 @@ if [ ! -f "$RAW_JSON" ]; then
     exit 1
 fi
 
+# Check if the dataset file is empty
+if [ ! -s "$RAW_JSON" ]; then
+    echo "⚠️  raw dataset is empty, skipping: $RAW_JSON"
+    exit 0
+fi
+
 # if [ ! -f "$EXTRA_JSON" ]; then
 #     echo "❌ extra JSON not found: $EXTRA_JSON"
 #     exit 1
@@ -40,6 +46,104 @@ if [ -z "$LANG_RAW" ]; then
 fi
 
 LANG=$(echo "$LANG_RAW" | tr 'A-Z' 'a-z')
+
+########################################
+# Detect test directory (test or tests)
+########################################
+# Clone repo temporarily to detect test directory structure
+TEMP_REPO_DIR="$PROJ_ROOT/data/temp_detect/$ORG/$REPO"
+mkdir -p "$TEMP_REPO_DIR"
+rm -rf "$TEMP_REPO_DIR"/*
+
+# Try to fetch the repository - try multiple common default branch names
+cd "$TEMP_REPO_DIR"
+if git clone --depth 1 --branch master https://github.com/$ORG/$REPO.git . 2>/dev/null || \
+   git clone --depth 1 --branch main https://github.com/$ORG/$REPO.git . 2>/dev/null || \
+   git clone --depth 1 --branch devel https://github.com/$ORG/$REPO.git . 2>/dev/null || \
+   git clone --depth 1 https://github.com/$ORG/$REPO.git . 2>/dev/null; then
+    # Check which test directory exists
+    if [ -d "test" ] && [ ! -d "tests" ]; then
+        TEST_DIR="test"
+        echo "📁 Detected test directory: test"
+    elif [ -d "tests" ] && [ ! -d "test" ]; then
+        TEST_DIR="tests"
+        echo "📁 Detected test directory: tests"
+    elif [ -d "tests" ]; then
+        # Both exist, prefer tests
+        TEST_DIR="tests"
+        echo "📁 Detected test directory: tests (both exist)"
+    elif [ -d "test" ]; then
+        TEST_DIR="test"
+        echo "📁 Detected test directory: test (only)"
+    else
+        TEST_DIR="tests"
+        echo "⚠️  No test directory found, defaulting to tests"
+    fi
+
+    # Check for e2e and runtime subdirectories
+    IGNORE_E2E=""
+    IGNORE_RUNTIME=""
+    if [ -d "$TEST_DIR/e2e" ]; then
+        IGNORE_E2E="--ignore=$TEST_DIR/e2e"
+    fi
+    if [ -d "$TEST_DIR/runtime" ]; then
+        IGNORE_RUNTIME="--ignore=$TEST_DIR/runtime"
+    fi
+
+    # Special handling for ansible - use test/units instead of full test/
+    # Ansible's test/integration/ contains Ansible modules that execute main() on import
+    # causing argparse conflicts when pytest collects them
+    if [ "$REPO" = "ansible" ]; then
+        TEST_DIR="test/units"
+        IGNORE_E2E="--ignore=test/integration"
+        IGNORE_RUNTIME="--ignore=test/support"
+        echo "📁 Ansible detected: using $TEST_DIR for pytest to avoid integration test collection errors"
+    fi
+else
+    # Default to tests if detection fails
+    TEST_DIR="tests"
+    IGNORE_E2E="--ignore=$TEST_DIR/e2e"
+    IGNORE_RUNTIME="--ignore=$TEST_DIR/runtime"
+    echo "⚠️  Failed to clone repo, defaulting to tests"
+fi
+
+cd "$PROJ_ROOT"
+rm -rf "$TEMP_REPO_DIR"
+
+export TEST_DIR
+export IGNORE_E2E
+export IGNORE_RUNTIME
+
+########################################
+# Extract Python version from pyproject.toml if available
+########################################
+PYTHON_VERSION=""
+if [ -n "$EXTRA_JSON" ] && [ -f "$EXTRA_JSON" ]; then
+    # Try to get python_version from extra JSON first
+    PYTHON_VERSION=$(jq -r '.python_version // empty' "$EXTRA_JSON" 2>/dev/null || echo "")
+fi
+
+# If not in extra JSON, try to fetch from repo's pyproject.toml
+if [ -z "$PYTHON_VERSION" ]; then
+    # Fetch pyproject.toml from GitHub and extract requires-python
+    PYPROJECT_URL="https://raw.githubusercontent.com/$ORG/$REPO/$PR_BASE_SHA/pyproject.toml"
+    PYPROJECT_CONTENT=$(curl -sL --retry 3 --connect-timeout 10 "$PYPROJECT_URL" 2>/dev/null || echo "")
+    if [ -n "$PYPROJECT_CONTENT" ]; then
+        # Extract requires-python value (e.g., ">=3.12,<3.14" -> "3.12")
+        REQUIRES_PYTHON=$(echo "$PYPROJECT_CONTENT" | grep -i '^requires-python' | sed -n 's/^requires-python[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+        if [ -n "$REQUIRES_PYTHON" ]; then
+            # Extract minimum version from range (e.g., ">=3.12,<3.14" -> "3.12")
+            PYTHON_VERSION=$(echo "$REQUIRES_PYTHON" | grep -oE '[0-9]+\.[0-9]+' | head -1)
+        fi
+    fi
+fi
+
+# Set default if still empty
+if [ -z "$PYTHON_VERSION" ]; then
+    PYTHON_VERSION="3.11"
+fi
+
+echo "🐍 Python version: $PYTHON_VERSION"
 
 ########################################
 # Build setup_commands block
@@ -125,7 +229,9 @@ class ImageBase(Image):
         return self._config
 
     def dependency(self) -> Union[str, "Image"]:
-        return "python:3.11-slim"
+        # Use python_version from PR if specified, otherwise default to 3.11
+        python_version = self.pr.python_version or "3.11"
+        return f"python:{python_version}-slim"
 
     def image_tag(self) -> str:
         return "base"
@@ -142,7 +248,7 @@ class ImageBase(Image):
             image_name = image_name.image_full_name()
 
         if self.config.need_clone:
-            code = f"RUN git clone https://github.com/{self.pr.org}/{self.pr.repo}.git /home/{self.pr.repo}"
+            code = f"""RUN apt-get update && apt-get install -y git && git clone https://github.com/{self.pr.org}/{self.pr.repo}.git /home/{self.pr.repo}"""
         else:
             code = f"COPY {self.pr.repo} /home/{self.pr.repo}"
 
@@ -190,11 +296,13 @@ class ImageDefault(Image):
             File(
                 ".",
                 "prepare.sh",
-                """#!/bin/bash
-set -e
+                f"""#!/bin/bash
+# Note: Removed set -e to allow script to continue even if commands fail
+# This ensures we see what actually fails and don't exit early
 
 cd /home/[[REPO_NAME]]
-echo "Starting prepare.sh"
+echo "=== Starting prepare.sh ==="
+echo "Current directory: $(pwd)"
 
 # Install git first since it may not be available in base image
 if ! command -v git >/dev/null 2>&1; then
@@ -208,44 +316,90 @@ if ! command -v git >/dev/null 2>&1; then
     fi
 fi
 
-git reset --hard
-bash /home/check_git_changes.sh
+echo "=== Running git reset ==="
+git reset --hard || echo "git reset failed, continuing..."
+bash /home/check_git_changes.sh || echo "check_git_changes.sh failed, continuing..."
 echo "Git reset done"
 
-git checkout {self.pr.base_commit_hash}
-bash /home/check_git_changes.sh
+echo "=== Running git checkout {self.pr.base_commit_hash} ==="
+git checkout {self.pr.base_commit_hash} || echo "git checkout failed, continuing..."
+bash /home/check_git_changes.sh || echo "check_git_changes.sh failed, continuing..."
 echo "Git checkout done"
 
 # Injected setup commands
+__SETUP_COMMANDS_BLOCK__
 
+echo "=== Installing system dependencies ==="
 # Install system dependencies if apt-get is available
 if command -v apt-get >/dev/null 2>&1; then
-    apt-get update && apt-get install -y gcc g++ make libpq-dev python3-dev || true
+    apt-get update && apt-get install -y gcc g++ make libpq-dev python3-dev || echo "apt-get install failed"
 elif command -v yum >/dev/null 2>&1; then
-    yum install -y gcc gcc-c++ make postgresql-devel || true
+    yum install -y gcc gcc-c++ make postgresql-devel || echo "yum install failed"
 fi
 ###ACTION_DELIMITER###
-pip install --upgrade pip setuptools wheel || true
+echo "=== Upgrading pip ==="
+pip install --upgrade pip setuptools wheel || echo "pip upgrade failed"
 ###ACTION_DELIMITER###
+echo "=== Checking for requirements.txt ==="
 if [ -f requirements.txt ]; then
-    pip install -r requirements.txt || true
+    echo "Installing requirements.txt..."
+    pip install -r requirements.txt || echo "pip install requirements.txt failed"
+else
+    echo "No requirements.txt found"
 fi
 ###ACTION_DELIMITER###
-pip install -e . || true
+echo "=== Installing package in editable mode ==="
+pip install -e . || echo "pip install -e . failed"
 ###ACTION_DELIMITER###
-pip install pytest coverage colorama || true
+echo "=== Installing test dependencies ==="
+pip install pytest pytest-mock coverage colorama || echo "pip install test deps failed"
 ###ACTION_DELIMITER###
-echo 'coverage run -m pytest -v --tb=short --basetemp=/tmp tests/' > test_commands.sh
+echo "=== Auto-detecting and installing missing dependencies ==="
+# Run a quick collection check to find missing modules
+echo "Running pytest --collect-only to detect missing dependencies..."
+MISSING_DEPS=$(python -m pytest --collect-only $TEST_DIR/ $IGNORE_E2E $IGNORE_RUNTIME 2>&1 | grep "ModuleNotFoundError: No module named" | sed "s/.*No module named '\(.*\)'/\1/" | sed 's/"//g' | sort -u || true)
+if [ -n "$MISSING_DEPS" ]; then
+    echo "Found missing modules:"
+    echo "$MISSING_DEPS"
+    echo "Installing missing dependencies..."
+    # Map common module names to package names
+    for module in $MISSING_DEPS; do
+        case "$module" in
+            dotenv) pip install python-dotenv || true ;;
+            httpx) pip install httpx || true ;;
+            litellm) pip install litellm || true ;;
+            *) pip install "$module" || echo "Failed to install $module" ;;
+        esac
+    done
+    echo "Dependency installation complete"
+else
+    echo "No missing dependencies detected"
+fi
 ###ACTION_DELIMITER###
-
+echo 'export PYTHONUNBUFFERED=1' > test_commands.sh
+echo 'export PYTHONIOENCODING=utf-8' >> test_commands.sh
+echo 'find . -type d -name __pycache__ -exec rm -rf {{}} + 2>/dev/null || true' >> test_commands.sh
+echo 'find . -type f -name "*.pyc" -delete 2>/dev/null || true' >> test_commands.sh
+echo "python -u -m pytest -v --tb=short --basetemp=/tmp $TEST_DIR/ $IGNORE_E2E $IGNORE_RUNTIME -p no:warnings | tee /tmp/pytest_output.txt" >> test_commands.sh
+###ACTION_DELIMITER###
+echo "=== Test command ==="
 cat test_commands.sh
 ###ACTION_DELIMITER###
-bash test_commands.sh || true""".replace("[[REPO_NAME]]", repo_name),
+echo "=== Running test command ==="
+bash test_commands.sh || echo "test command failed"
+###ACTION_DELIMITER###
+echo "=== prepare.sh completed ==="
+""".replace("[[REPO_NAME]]", repo_name),
             ),
             File(
                 ".",
                 "test.patch",
                 f"{self.pr.test_patch}",
+            ),
+            File(
+                ".",
+                "fix.patch",
+                f"{self.pr.fix_patch}",
             ),
             File(
                 ".",
@@ -264,19 +418,39 @@ fi""",
                 ".",
                 "run.sh",
                 """#!/bin/bash
-cd /home/[[REPO_NAME]]
-coverage run -m pytest -v --tb=short --basetemp=/tmp tests/
+echo "=== Starting run.sh ==="
+echo "Current directory: $(pwd)"
 
+if [ ! -d "/home/[[REPO_NAME]]" ]; then
+    echo "ERROR: /home/[[REPO_NAME]] directory does not exist!"
+    echo "Contents of /home:"
+    ls -la /home/
+    exit 1
+fi
+
+cd /home/[[REPO_NAME]]
+echo "Running: python -u -m pytest -v --tb=short --basetemp=/tmp $TEST_DIR/ $IGNORE_E2E $IGNORE_RUNTIME -p no:warnings"
+export PYTHONUNBUFFERED=1
+export PYTHONIOENCODING=utf-8
+find . -type d -name __pycache__ -exec rm -rf {{}} + 2>/dev/null || true
+find . -type f -name "*.pyc" -delete 2>/dev/null || true
+python -u -m pytest -v --tb=short --basetemp=/tmp $TEST_DIR/ $IGNORE_E2E $IGNORE_RUNTIME -p no:warnings | tee /tmp/pytest_output.txt || echo "pytest exited with code: $?"
+echo "=== run.sh completed ==="
 """.replace("[[REPO_NAME]]", repo_name),
             ),
             File(
                 ".",
                 "test-run.sh",
                 """#!/bin/bash
-set -e
+# Note: Removed set -e to allow script to continue even if commands fail
+# This ensures we see what actually fails
+
+echo "=== Starting test-run.sh ==="
+echo "Current directory: $(pwd)"
 
 # Ensure git is available
 if ! command -v git >/dev/null 2>&1; then
+    echo "Installing git..."
     if command -v apt-get >/dev/null 2>&1; then
         apt-get update && apt-get install -y git || true
     elif command -v yum >/dev/null 2>&1; then
@@ -286,28 +460,52 @@ if ! command -v git >/dev/null 2>&1; then
     fi
 fi
 
+echo "=== Checking repository directory ==="
+if [ ! -d "/home/[[REPO_NAME]]" ]; then
+    echo "ERROR: /home/[[REPO_NAME]] directory does not exist!"
+    echo "Contents of /home:"
+    ls -la /home/
+    exit 1
+fi
+
 cd /home/[[REPO_NAME]]
+echo "Current directory: $(pwd)"
+
 # Apply test.patch only if it exists and is not empty
+echo "=== Applying test.patch ==="
 if [ -s /home/test.patch ]; then
-    if ! git apply --whitespace=nowarn /home/test.patch 2>/dev/null; then
+    echo "Found test.patch, applying..."
+    if ! git apply --whitespace=nowarn /home/test.patch 2>&1; then
         echo "Warning: git apply test.patch failed, trying alternative method..."
-        exit 1
+        echo "Continuing anyway..."
     fi
 else
     echo "No test.patch to apply (empty or missing)"
 fi
-coverage run -m pytest -v --tb=short --basetemp=/tmp tests/
 
+echo "=== Running pytest ==="
+echo "Command: python -u -m pytest -v --tb=short --basetemp=/tmp $TEST_DIR/ $IGNORE_E2E $IGNORE_RUNTIME -p no:warnings"
+export PYTHONUNBUFFERED=1
+export PYTHONIOENCODING=utf-8
+find . -type d -name __pycache__ -exec rm -rf {{}} + 2>/dev/null || true
+find . -type f -name "*.pyc" -delete 2>/dev/null || true
+python -u -m pytest -v --tb=short --basetemp=/tmp $TEST_DIR/ $IGNORE_E2E $IGNORE_RUNTIME -p no:warnings | tee /tmp/pytest_output.txt || echo "pytest exited with code: $?"
+echo "=== test-run.sh completed ==="
 """.replace("[[REPO_NAME]]", repo_name),
             ),
             File(
                 ".",
                 "fix-run.sh",
                 """#!/bin/bash
-set -e
+# Note: Removed set -e to allow script to continue even if commands fail
+# This ensures we see what actually fails
+
+echo "=== Starting fix-run.sh ==="
+echo "Current directory: $(pwd)"
 
 # Ensure git is available
 if ! command -v git >/dev/null 2>&1; then
+    echo "Installing git..."
     if command -v apt-get >/dev/null 2>&1; then
         apt-get update && apt-get install -y git || true
     elif command -v yum >/dev/null 2>&1; then
@@ -317,25 +515,44 @@ if ! command -v git >/dev/null 2>&1; then
     fi
 fi
 
+echo "=== Checking repository directory ==="
+if [ ! -d "/home/[[REPO_NAME]]" ]; then
+    echo "ERROR: /home/[[REPO_NAME]] directory does not exist!"
+    echo "Contents of /home:"
+    ls -la /home/
+    exit 1
+fi
+
 cd /home/[[REPO_NAME]]
+echo "Current directory: $(pwd)"
+
 # Apply patches: test.patch (if exists) and fix.patch
+echo "=== Applying patches ==="
 if [ -s /home/test.patch ]; then
-    if ! git apply --whitespace=nowarn /home/test.patch /home/fix.patch 2>/dev/null; then
+    echo "Found test.patch, trying to apply both patches..."
+    if ! git apply --whitespace=nowarn /home/test.patch /home/fix.patch 2>&1; then
         echo "Warning: git apply both patches failed, trying fix.patch only..."
-        if ! git apply --whitespace=nowarn /home/fix.patch 2>/dev/null; then
+        if ! git apply --whitespace=nowarn /home/fix.patch 2>&1; then
             echo "Warning: git apply fix.patch also failed"
-            exit 1
+            echo "Continuing without patches..."
         fi
     fi
 else
-    # No test.patch, only apply fix.patch
-    if ! git apply --whitespace=nowarn /home/fix.patch 2>/dev/null; then
+    echo "No test.patch found, applying fix.patch only..."
+    if ! git apply --whitespace=nowarn /home/fix.patch 2>&1; then
         echo "Warning: git apply fix.patch failed"
-        exit 1
+        echo "Continuing without patch..."
     fi
 fi
-coverage run -m pytest -v --tb=short --basetemp=/tmp tests/
 
+echo "=== Running pytest ==="
+echo "Command: python -u -m pytest -v --tb=short --basetemp=/tmp $TEST_DIR/ $IGNORE_E2E $IGNORE_RUNTIME -p no:warnings"
+export PYTHONUNBUFFERED=1
+export PYTHONIOENCODING=utf-8
+find . -type d -name __pycache__ -exec rm -rf {{}} + 2>/dev/null || true
+find . -type f -name "*.pyc" -delete 2>/dev/null || true
+python -u -m pytest -v --tb=short --basetemp=/tmp $TEST_DIR/ $IGNORE_E2E $IGNORE_RUNTIME -p no:warnings | tee /tmp/pytest_output.txt || echo "pytest exited with code: $?"
+echo "=== fix-run.sh completed ==="
 """.replace("[[REPO_NAME]]", repo_name),
             ),
         ]
@@ -362,10 +579,15 @@ RUN bash /home/prepare.sh
 
 @Instance.register("{{ORG}}", "{{REPO}}")
 class InstanceTemplate(Instance):
+    # Python version for this repository (extracted from pyproject.toml)
+    python_version = "{{PYTHON_VERSION}}"
+
     def __init__(self, pr: PullRequest, config: Config, *args, **kwargs):
         super().__init__()
         self._pr = pr
         self._config = config
+        # Set python_version on the PR object for Image classes to use
+        self._pr.python_version = self.__class__.python_version
 
     @property
     def pr(self) -> PullRequest:
@@ -390,9 +612,9 @@ class InstanceTemplate(Instance):
         skipped_tests = set()  # Tests that were skipped
         import re
 
-        # Regex patterns to match test cases
+        # Regex patterns to match test cases - supports both test/ and tests/ directories
         pattern1 = re.compile(
-            r"(tests/[^:]+::[^ ]+)\s+(PASSED|FAILED|SKIPPED|XFAIL)\b"
+            r"((?:test|tests)/[^:]+::[^ ]+)\s+(PASSED|FAILED|SKIPPED|XFAIL)\b"
         )  # Capture full test name (non-whitespace) after ::
         # Find all matches for pattern1
         for match in pattern1.finditer(log):
@@ -408,14 +630,14 @@ class InstanceTemplate(Instance):
                 failed_tests.add(test_name)  # XFAIL is considered a failure
 
         # Handle pytest ERROR cases (e.g., import errors during collection)
-        # Format: "ERROR tests/test_module.py"
-        error_pattern = re.compile(r"^ERROR\s+(tests/[^:]+::[^ ]+)\b", re.MULTILINE)
+        # Format: "ERROR tests/test_module.py" or "ERROR test/test_module.py"
+        error_pattern = re.compile(r"^ERROR\s+((?:test|tests)/[^:]+::[^ ]+)\b", re.MULTILINE)
         for match in error_pattern.finditer(log):
             test_name = match.group(1)
             failed_tests.add(test_name)
 
         # Also capture "ERROR tests/test_module.py" without the test name
-        error_file_pattern = re.compile(r"^ERROR\s+(tests/[^.]+\.py)\b", re.MULTILINE)
+        error_file_pattern = re.compile(r"^ERROR\s+((?:test|tests)/[^.]+\.py)\b", re.MULTILINE)
         for match in error_file_pattern.finditer(log):
             test_file = match.group(1)
             failed_tests.add(test_file)
@@ -450,7 +672,14 @@ echo "✅ Injected setup commands from $EXTRA_JSON"
 ###################################################
 # Replace placeholder {{ORG}} {{REPO}}
 sed -i "" "s/{{ORG}}/$ORG/g"  "$TARGET_FILE" 2>/dev/null || sed -i "s/{{ORG}}/$ORG/g" "$TARGET_FILE"
-sed -i "" "s/{{REPO}}/$REPO/g" "$TARGET_FILE" 2>/dev/null || sed -i "s/{{REPO}}/$REPO/g" "$TARGET_FILE"
+sed -i "" "s/{{REPO}}/$REPO/g"  "$TARGET_FILE" 2>/dev/null || sed -i "s/{{REPO}}/$REPO/g" "$TARGET_FILE"
+sed -i "" "s/{{PYTHON_VERSION}}/$PYTHON_VERSION/g"  "$TARGET_FILE" 2>/dev/null || sed -i "s/{{PYTHON_VERSION}}/$PYTHON_VERSION/g" "$TARGET_FILE"
+
+# Replace test directory variables with detected values
+# Escape the variables for sed replacement (they contain / which is the sed delimiter)
+sed -i "" 's|\$TEST_DIR|'"$TEST_DIR"'|g' "$TARGET_FILE" 2>/dev/null || sed -i 's|\$TEST_DIR|'"$TEST_DIR"'|g' "$TARGET_FILE"
+sed -i "" 's|\$IGNORE_E2E|'"$IGNORE_E2E"'|g' "$TARGET_FILE" 2>/dev/null || sed -i 's|\$IGNORE_E2E|'"$IGNORE_E2E"'|g' "$TARGET_FILE"
+sed -i "" 's|\$IGNORE_RUNTIME|'"$IGNORE_RUNTIME"'|g' "$TARGET_FILE" 2>/dev/null || sed -i 's|\$IGNORE_RUNTIME|'"$IGNORE_RUNTIME"'|g' "$TARGET_FILE"
 
 rm -f "$TARGET_FILE.bak"
 

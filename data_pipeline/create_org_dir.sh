@@ -138,7 +138,13 @@ while IFS= read -r line || [ -n "$line" ]; do
     # For Python, ensure every level is a package
     if [ "$LANG" == "python" ]; then
         ensure_package_dirs "$BASE_DIR/$ORG"
-        ensure_package_dirs "$REPO_DIR"
+        # Skip creating shadow directory if .py file already exists (to avoid Python import conflicts)
+        REPO_PY_FILE="${ORG_DIR}/${REPO}.py"
+        if [ -f "$REPO_PY_FILE" ]; then
+            echo "  ⚠️  Skipping shadow directory creation (conflicts with ${REPO}.py)"
+        else
+            ensure_package_dirs "$REPO_DIR"
+        fi
     else
         # Also create org's __init__.py for consistency (optional)
         touch "$INIT_FILE" 2>/dev/null || true

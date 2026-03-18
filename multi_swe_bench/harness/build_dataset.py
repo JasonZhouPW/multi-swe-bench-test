@@ -15,6 +15,7 @@
 
 import concurrent.futures
 import glob
+import json
 import logging
 import sys
 from dataclasses import asdict, dataclass, field
@@ -43,6 +44,7 @@ from multi_swe_bench.harness.image import Config, Image
 from multi_swe_bench.harness.instance import Instance
 from multi_swe_bench.harness.pull_request import PullRequest, Repository
 from multi_swe_bench.harness.report import generate_report
+from multi_swe_bench.harness import repos  # Import repos to register all Instance subclasses
 from multi_swe_bench.utils import docker_util, git_util
 from multi_swe_bench.utils.args_util import ArgumentParser
 from multi_swe_bench.utils.fs_utils import copy_source_code
@@ -426,6 +428,36 @@ class CliArgs:
 
         return self._raw_dataset
 
+    def is_pr_already_processed(self, pr: PullRequest) -> bool:
+        """Check if a PR has already been processed by checking the dataset file.
+
+        If the dataset file exists for the repo and contains a record for this PR number,
+        skip processing this PR.
+        """
+        if not self.output_dir:
+            return False
+
+        dataset_file_name = f"{pr.org}__{pr.repo}_dataset.jsonl"
+        dataset_file = self.output_dir / dataset_file_name
+
+        if not dataset_file.exists():
+            return False
+
+        # Check if this PR number already exists in the dataset file
+        try:
+            with open(dataset_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    if line.strip() == "":
+                        continue
+                    data = json.loads(line)
+                    if data.get("number") == pr.number:
+                        return True
+        except Exception as e:
+            self.logger.warning(f"Error reading dataset file {dataset_file}: {e}")
+            return False
+
+        return False
+
     @property
     def instances(self) -> list[Instance]:
         def list_to_dict(env: Optional[list[str]]) -> Optional[dict[str, str]]:
@@ -458,6 +490,10 @@ class CliArgs:
                     if not self.check_specific(pr.id):
                         continue
                     if self.check_skip(pr.id):
+                        continue
+                    # Check if this PR has already been processed
+                    if self.is_pr_already_processed(pr):
+                        self.logger.info(f"PR {pr.id} already processed, skipping...")
                         continue
                     instance: Instance = Instance.create(pr, config)
                     self._instances.append(instance)

@@ -91,41 +91,28 @@ class Report(PullRequestBase):
         if not force and self.valid is not None:
             return (self.valid, self.error_msg)
 
-        # 1. Exist valid fix patch result
-        # if self.fix_patch_result.all_count == 0:
-        #     self.valid = False
-        #     self.error_msg = f"After applying the fix patch, no test results were captured when executing the test command. A brief summary is as follows: {self.short_report()}"
-        #     return (self.valid, self.error_msg)
+        # 1. Check if pytest collection failed (INTERNALERROR or argparse errors)
+        # This indicates the test command failed to even run properly
+        if self.fix_patch_result.passed_count == 0 and self.fix_patch_result.failed_count == 0 and self.fix_patch_result.skipped_count == 0:
+            self.valid = False
+            self.error_msg = f"Test execution failed: pytest collected no valid tests. This may be due to collection errors or incorrect test configuration."
+            return (self.valid, self.error_msg)
 
         # 2. No new failures
-        # for name, test in self._tests.items():
-        #     if test.test == TestStatus.PASS and test.fix == TestStatus.FAIL:
-        #         self.valid = False
-        #         self.error_msg = f"Before applying the fix patch, the test passed; however, after applying the fix patch, the test failed. A brief summary is as follows: {self.short_report()}. `{name}`: {test}"
-        #         return (self.valid, self.error_msg)
+        for name, test in self._tests.items():
+            if test.test == TestStatus.PASS and test.fix == TestStatus.FAIL:
+                self.valid = False
+                self.error_msg = f"Before applying the fix patch, the test passed; however, after applying the fix patch, the test failed. `{name}`: {test}"
+                return (self.valid, self.error_msg)
 
-        # 3. Fix something
-        # fix_something = False
-        # for name, test in self._tests.items():
-        #     if test.test != TestStatus.PASS and test.fix == TestStatus.PASS:
-        #         fix_something = True
-        #         self.fixed_tests[name] = test
-
-        # if not fix_something:
-        #     self.valid = False
-        #     self.error_msg = f"After applying the fix patch, no test cases transitioned from failed to passed. A brief summary is as follows: {self.short_report()}"
-        #     return (self.valid, self.error_msg)
-
-        # 4. Anomalous Pattern
-        # for name, test in self._tests.items():
-        #     if (
-        #         (test.test == TestStatus.NONE or test.test == TestStatus.SKIP)
-        #         and test.fix == TestStatus.FAIL
-        #         and test.run == TestStatus.PASS
-        #     ):
-        #         self.valid = False
-        #         self.error_msg = f"By comparing the test results before and after applying the fix patch, an anomalous pattern was detected. A brief summary is as follows: {self.short_report()}. `{name}`: {test}"
-        #         return (self.valid, self.error_msg)
+        # 3. Check for collection errors in fix run
+        # If fix run has errors but test run has results, something went wrong
+        if self.fix_patch_result.failed_count > 0 and self.test_patch_result.failed_count == 0:
+            # Check if most failures are ERROR type (collection errors)
+            if self.fix_patch_result.failed_count > 5:
+                self.valid = False
+                self.error_msg = f"Test execution encountered collection errors after applying fix patch."
+                return (self.valid, self.error_msg)
 
         for name, test in self._tests.items():
             if test.test == TestStatus.PASS and test.fix == TestStatus.PASS:
@@ -137,10 +124,16 @@ class Report(PullRequestBase):
             elif test.test == TestStatus.NONE and test.fix == TestStatus.PASS:
                 self.n2p_tests[name] = test
 
+        # 4. Check if any tests were actually fixed
+        # A valid fix should have at least one test that went from fail/skip/none to pass
+        # if len(self.f2p_tests) == 0 and len(self.s2p_tests) == 0 and len(self.n2p_tests) == 0:
+        #     self.valid = False
+        #     self.error_msg = f"No tests were fixed. All tests that passed after fix were already passing before."
+        #     return (self.valid, self.error_msg)
+
         self.valid = True
         self.error_msg = ""
-        # return (self.valid, self.error_msg)
-        return (True,"")
+        return (self.valid, self.error_msg)
 
     def short_report(self) -> str:
         return (

@@ -166,12 +166,60 @@ async def run_prepare_cmds(
 
 
 async def download_log(
-    deployment: MultiSweBenchDockerDeployment, output_file: Path, save_file: Path
+    deployment: MultiSweBenchDockerDeployment, output_file: Path, save_file: Path, logger: logging.Logger = None
 ):
-    res = await deployment.runtime.read_file(ReadFileRequest(path=output_file))
-    with open(save_file, "w") as f:
-        f.write(res.content)
-    return res.content
+    """Download log file from container with debugging
+
+    Uses cat command directly instead of ReadFileRequest to avoid truncation issues
+    with large log files. ReadFileRequest may timeout or have size limits.
+    """
+    output_file_str = str(output_file)
+
+    # First, check if the file exists and get its size
+    try:
+        ls_cmd = f"ls -la {output_file_str}"
+        ls_result = await communicate_async(deployment, ls_cmd, session_name="eval", timeout=10)
+        if logger:
+            logger.info(f"File check result: {ls_result}")
+    except Exception as e:
+        if logger:
+            logger.warning(f"Failed to check file existence: {e}")
+        raise FileNotFoundError(f"Log file not found in container: {output_file_str}") from e
+
+    # Use cat command to read the entire file content directly
+    # This is more reliable than ReadFileRequest for large log files
+    # Increase timeout to handle large log files (pytest verbose output can be 100KB+)
+    try:
+        cat_cmd = f"cat {output_file_str}"
+        cat_result = await communicate_async(deployment, cat_cmd, session_name="eval", timeout=120)
+        if cat_result is None:
+            raise RuntimeError("cat command returned None - file may be too large or command timed out")
+        if logger:
+            logger.info(f"File content via cat: {len(cat_result)} bytes")
+            if len(cat_result) > 500:
+                logger.info(f"Content preview (first 500 chars): {cat_result[:500]}")
+            else:
+                logger.info(f"Content: {cat_result}")
+
+        # Save the content to file
+        with open(save_file, "w", encoding="utf-8") as f:
+            f.write(cat_result)
+        return cat_result
+    except Exception as e:
+        if logger:
+            logger.error(f"Failed to cat file: {e}")
+        # Fallback to ReadFileRequest if cat fails
+        logger.warning("Falling back to ReadFileRequest API")
+        try:
+            res = await deployment.runtime.read_file(ReadFileRequest(path=output_file_str))
+            if logger:
+                logger.info(f"read_file returned: content length={len(res.content) if hasattr(res, 'content') else 'N/A'}")
+            with open(save_file, "w", encoding="utf-8") as f:
+                f.write(res.content)
+            return res.content
+        except Exception as fallback_error:
+            logger.error(f"Fallback ReadFileRequest also failed: {fallback_error}")
+            raise RuntimeError(f"Failed to read log file: {e}; Fallback also failed: {fallback_error}")
 
 
 async def run_and_save_logs(
@@ -245,7 +293,7 @@ async def run_and_save_logs(
             deployment, test_cmd, session_name="eval", timeout=timeout
         )
         logger.info(f"{image_name}/{name}: download logs")
-        output = await download_log(deployment, inD_save_file, save_file)
+        output = await download_log(deployment, inD_save_file, save_file, logger)
     except Exception as e:
         logger.error(f"error in run_and_save_logs: {e}")
         raise RuntimeError(f"error in run_and_save_logs: {e}")
@@ -388,7 +436,7 @@ async def run_and_save_logs_and_generate_dockerfile(
 
         # download logs
         logger.info(f"{image_name}/{name}: download logs")
-        output = await download_log(deployment, inD_save_file, save_file)
+        output = await download_log(deployment, inD_save_file, save_file, logger)
     except Exception as e:
         logger.error(f"error in run_and_save_logs: {e}")
         raise RuntimeError(f"error in run_and_save_logs: {e}")

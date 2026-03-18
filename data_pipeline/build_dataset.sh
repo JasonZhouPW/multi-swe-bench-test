@@ -113,6 +113,14 @@ while IFS= read -r LINE; do
     ##########################################
     echo "$LINE" | jq -c '.' > "$TEMP_RAW_FILE"
 
+    # Verify the temp file was created and contains valid JSON
+    if [ ! -s "$TEMP_RAW_FILE" ]; then
+        echo "❌ Error: Failed to create temp raw file: $TEMP_RAW_FILE"
+        echo "[$RECORD_END] ❌ FAILED | $PR_ID | Record #$index | Failed to create temp raw file" >> "$PROCESSING_LOG"
+        FAIL_COUNT=$((FAIL_COUNT + 1))
+        continue
+    fi
+
     ##########################################
     # Generate config file
     ##########################################
@@ -128,7 +136,7 @@ while IFS= read -r LINE; do
     "specifics": [],
     "skips": [],
     "repo_dir": "$REPO_DIR",
-    "need_clone": false,
+    "need_clone": true,
     "global_env": [],
     "clear_env": true,
     "stop_on_error": false,
@@ -200,6 +208,10 @@ EOF
         # Log failure with detailed reason
         echo "[$RECORD_END] ❌ FAILED | $PR_ID | Record #$index | $ERROR_REASON" >> "$PROCESSING_LOG"
     fi
+
+    # Clean up Docker images for this record (only images with tag pr-{number})
+    echo "🧹 Cleaning up Docker images for $PR_ID..."
+    python -c "from multi_swe_bench.utils.docker_util import cleanup_docker_images; cleanup_docker_images('$PR_ORG', '$PR_REPO', '$PR_NUMBER')" 2>&1 || true
 
     # Show progress
     echo ""

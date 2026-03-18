@@ -193,6 +193,7 @@ class PullRequest(PullRequestBase):
     updated_at: Optional[str] = None
     closed_at: Optional[str] = None
     merged_at: Optional[str] = None
+    python_version: Optional[str] = None  # Python version for this repo (e.g., "3.12", "3.11")
 
     def __post_init__(self):
         # Relax strict manual type checks to handle GraphQL-generated data

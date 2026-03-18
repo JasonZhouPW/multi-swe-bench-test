@@ -13,8 +13,14 @@
 #  limitations under the License.
 
 import logging
+import os
+import re
+import warnings
 from pathlib import Path
 from typing import Optional, Union
+
+# Suppress the gevent concurrency warning from Docker SDK
+warnings.filterwarnings("ignore", message=".*gevent.*")
 
 import docker
 
@@ -90,11 +96,13 @@ def run(
 
         output = ""
         if output_path:
+            # Wait for container to finish first to ensure all logs are captured
+            container.wait()
+            # Then fetch all logs at once
+            logs = container.logs(stdout=True, stderr=True)
+            output = logs.decode("utf-8")
             with open(output_path, "w", encoding="utf-8") as f:
-                for line in container.logs(stream=True, follow=True):
-                    line_decoded = line.decode("utf-8")
-                    f.write(line_decoded)
-                    output += line_decoded
+                f.write(output)
         else:
             container.wait()
             output = container.logs().decode("utf-8")
@@ -106,3 +114,133 @@ def run(
                 container.remove(force=True)
             except Exception as e:
                 print(f"Warning: Failed to remove container: {e}")
+
+
+def remove(image_name: str, logger: logging.Logger = None):
+    """Remove a Docker image by name
+
+    Args:
+        image_name: The name of the Docker image to remove
+        logger: Optional logger for logging output
+    """
+    try:
+        docker_client.images.remove(image_name, force=True)
+        if logger:
+            logger.info(f"Image {image_name} removed successfully")
+    except Exception as e:
+        if logger:
+            logger.warning(f"Failed to remove image {image_name}: {e}")
+
+
+def cleanup_docker_images(
+    org: str,
+    repo: str,
+    pr_number: str,
+    logger: logging.Logger = None
+):
+    """Clean up Docker images after processing a PR record
+
+    Removes:
+    - Images with tag matching pattern: pr-{number}
+    - Dangling images with <none> name or tag (using Docker filter)
+    - Any images with <none> tags (second pass scan)
+
+    Preserves:
+    - All other images including base images
+
+    Args:
+        org: GitHub organization name
+        repo: GitHub repository name
+        pr_number: Pull request number
+        logger: Optional logger for logging output
+    """
+    if logger:
+        logger.info(f"Starting Docker image cleanup for {org}/{repo}#{pr_number}")
+
+    removed_count = 0
+    dangling_count = 0
+
+    # Remove images with tag pr-{number}
+    try:
+        images = docker_client.images.list()
+        for image in images:
+            image_tags = image.tags if image.tags else []
+
+            # Check if any tag ends with :pr-{number} pattern
+            # Full tag format is like "envagent/ansible_m_ansible:pr-86642"
+            for tag in image_tags:
+                # Extract just the tag part after the last colon
+                tag_parts = tag.split(":")
+                image_tag = tag_parts[-1] if len(tag_parts) > 1 else tag
+
+                if image_tag == f"pr-{pr_number}":
+                    if logger:
+                        logger.info(f"Removing image with tag {tag}")
+                    remove(tag, logger)
+                    removed_count += 1
+                    break
+    except Exception as e:
+        if logger:
+            logger.warning(f"Error removing pr-{pr_number} images: {e}")
+
+    # Remove dangling images (images with <none> name or tag)
+    try:
+        # First pass: remove dangling images using Docker filter
+        dangling_images = docker_client.images.list(filters={"dangling": True})
+        for image in dangling_images:
+            image_tags = image.tags if image.tags else []
+
+            # Check if image has <none> tag or no tags at all
+            is_dangling = False
+            if not image_tags:
+                is_dangling = True
+            else:
+                for tag in image_tags:
+                    if "<none>" in tag:
+                        is_dangling = True
+                        break
+
+            if is_dangling:
+                if logger:
+                    logger.info(f"Removing dangling image: {image.short_id}")
+                try:
+                    docker_client.images.remove(image.id, force=True)
+                    dangling_count += 1
+                except Exception as e:
+                    if logger:
+                        logger.warning(f"Failed to remove dangling image {image.short_id}: {e}")
+
+        # Second pass: scan ALL images for any with <none> tags that might not be marked as dangling
+        all_images = docker_client.images.list()
+        for image in all_images:
+            image_tags = image.tags if image.tags else []
+
+            # Check if any tag contains <none>
+            has_none_tag = False
+            for tag in image_tags:
+                if "<none>" in tag:
+                    has_none_tag = True
+                    break
+
+            if has_none_tag:
+                # Skip if already removed in the first pass
+                try:
+                    docker_client.images.get(image.id)
+                    if logger:
+                        logger.info(f"Removing image with <none> tag: {image.short_id}")
+                    docker_client.images.remove(image.id, force=True)
+                    dangling_count += 1
+                except docker.errors.ImageNotFound:
+                    pass  # Already removed
+                except Exception as e:
+                    if logger:
+                        logger.warning(f"Failed to remove image with <none> tag {image.short_id}: {e}")
+    except Exception as e:
+        if logger:
+            logger.warning(f"Error during <none> tag image cleanup: {e}")
+
+    if logger:
+        logger.info(
+            f"Cleanup complete: removed {removed_count} pr-{pr_number} images, "
+            f"{dangling_count} dangling images"
+        )

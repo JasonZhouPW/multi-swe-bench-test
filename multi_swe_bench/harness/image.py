@@ -31,6 +31,7 @@ class Config:
     need_clone: bool
     global_env: Optional[dict[str, str]]
     clear_env: bool
+    python_version: Optional[str] = None  # Python version for base image (e.g., "3.12", "3.11")
 
 
 class Image:

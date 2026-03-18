@@ -14,6 +14,12 @@ if [ ! -f "$RAW_JSON" ]; then
     exit 1
 fi
 
+# Check if the dataset file is empty
+if [ ! -s "$RAW_JSON" ]; then
+    echo "⚠️  raw dataset is empty, skipping: $RAW_JSON"
+    exit 0
+fi
+
 # if [ ! -f "$EXTRA_JSON" ]; then
 #     echo "❌ extra JSON not found: $EXTRA_JSON"
 #     exit 1
