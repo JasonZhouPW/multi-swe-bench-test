@@ -230,7 +230,7 @@ git reset --hard
 echo "Git reset done"
 bash /home/check_git_changes.sh
 echo "First git check done"
-git checkout {self.pr.base_commit_hash}
+git checkout {pr.base_commit_hash}
 echo "Git checkout done"
 bash /home/check_git_changes.sh
 echo "Second git check done"

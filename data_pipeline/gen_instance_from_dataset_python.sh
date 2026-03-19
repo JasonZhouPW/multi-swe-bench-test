@@ -379,8 +379,8 @@ git reset --hard || echo "git reset failed, continuing..."
 bash /home/check_git_changes.sh || echo "check_git_changes.sh failed, continuing..."
 echo "Git reset done"
 
-echo "=== Running git checkout {self.pr.base_commit_hash} ==="
-git checkout {self.pr.base_commit_hash} || echo "git checkout failed, continuing..."
+echo "=== Running git checkout {pr.base_commit_hash} ==="
+git checkout {pr.base_commit_hash} || echo "git checkout failed, continuing..."
 bash /home/check_git_changes.sh || echo "check_git_changes.sh failed, continuing..."
 echo "Git checkout done"
 

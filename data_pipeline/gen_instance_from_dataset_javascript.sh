@@ -224,7 +224,7 @@ set -e
 cd /home/[[REPO_NAME]]
 git reset --hard
 bash /home/check_git_changes.sh
-git checkout {self.pr.base_commit_hash}
+git checkout {pr.base_commit_hash}
 bash /home/check_git_changes.sh
 
 # Injected setup commands
