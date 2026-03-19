@@ -49,6 +49,7 @@ def build(
             tag=image_full_name,
             rm=True,
             forcerm=True,
+            nocache=True,
             decode=True,
             encoding="utf-8",
         )

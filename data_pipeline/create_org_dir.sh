@@ -129,28 +129,18 @@ while IFS= read -r line || [ -n "$line" ]; do
 
     BASE_DIR="$PROJ_ROOT/multi_swe_bench/harness/repos/${LANG}"
     ORG_DIR="${BASE_DIR}/${ORG}"
-    REPO_DIR="${ORG_DIR}/${REPO}"
     INIT_FILE="${ORG_DIR}/__init__.py"
 
-    echo "📂 Creating directory: $REPO_DIR"
-    # For Python, we'll create __init__.py at all levels; for other languages, we'll create directories (but won't force __init__.py creation)
-    mkdir -p "$REPO_DIR"
-    # For Python, ensure every level is a package
-    if [ "$LANG" == "python" ]; then
-        ensure_package_dirs "$BASE_DIR/$ORG"
-        # Skip creating shadow directory if .py file already exists (to avoid Python import conflicts)
-        REPO_PY_FILE="${ORG_DIR}/${REPO}.py"
-        if [ -f "$REPO_PY_FILE" ]; then
-            echo "  ⚠️  Skipping shadow directory creation (conflicts with ${REPO}.py)"
-        else
-            ensure_package_dirs "$REPO_DIR"
-        fi
-    else
-        # Also create org's __init__.py for consistency (optional)
-        touch "$INIT_FILE" 2>/dev/null || true
-    fi
+    # Always create org directory (not repo directory)
+    # The gen_instance_from_dataset_*.sh scripts will create <repo>.py files
+    echo "📂 Creating org directory: $ORG_DIR"
+    mkdir -p "$ORG_DIR"
+    touch "$INIT_FILE" 2>/dev/null || true
+    # Also ensure parent __init__.py exists
+    touch "$BASE_DIR/__init__.py" 2>/dev/null || true
 
     # Construct import line (using sanitized names to guarantee validity)
+    # Note: imports will be for the .py file created by gen scripts
     IMPORT_LINE="from multi_swe_bench.harness.repos.${LANG}.${ORG}.${REPO} import *"
 
     touch "$INIT_FILE"

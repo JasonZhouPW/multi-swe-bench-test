@@ -56,11 +56,26 @@ mkdir -p "$TEMP_REPO_DIR"
 rm -rf "$TEMP_REPO_DIR"/*
 
 # Try to fetch the repository - try multiple common default branch names
+# Skip clone if network is slow - we have fallback logic
 cd "$TEMP_REPO_DIR"
-if git clone --depth 1 --branch master https://github.com/$ORG/$REPO.git . 2>/dev/null || \
-   git clone --depth 1 --branch main https://github.com/$ORG/$REPO.git . 2>/dev/null || \
-   git clone --depth 1 --branch devel https://github.com/$ORG/$REPO.git . 2>/dev/null || \
-   git clone --depth 1 https://github.com/$ORG/$REPO.git . 2>/dev/null; then
+CLONE_SUCCESS=false
+
+# Try clone with timeout (use perl with system instead of exec for proper exit code)
+for branch in master main devel; do
+    if perl -e 'alarm shift; exit(system(@ARGV) >> 8)' 60 git clone --depth 1 --branch "$branch" https://github.com/$ORG/$REPO.git . 2>/dev/null; then
+        CLONE_SUCCESS=true
+        break
+    fi
+done
+
+# If no branch worked, try without specifying branch
+if [ "$CLONE_SUCCESS" = "false" ]; then
+    if perl -e 'alarm shift; exit(system(@ARGV) >> 8)' 60 git clone --depth 1 https://github.com/$ORG/$REPO.git . 2>/dev/null; then
+        CLONE_SUCCESS=true
+    fi
+fi
+
+if [ "$CLONE_SUCCESS" = "true" ]; then
     # Check which test directory exists
     if [ -d "test" ] && [ ! -d "tests" ]; then
         TEST_DIR="test"
@@ -99,16 +114,42 @@ if git clone --depth 1 --branch master https://github.com/$ORG/$REPO.git . 2>/de
         IGNORE_RUNTIME="--ignore=test/support"
         echo "📁 Ansible detected: using $TEST_DIR for pytest to avoid integration test collection errors"
     fi
+
+    # Special handling for ragflow - use test/unit_test instead of full test/
+    # ragflow's test/testcases requires environment variables like ZHIPU_AI_API_KEY
+    if [ "$REPO" = "ragflow" ]; then
+        TEST_DIR="test/unit_test"
+        IGNORE_E2E=""
+        IGNORE_RUNTIME=""
+        echo "📁 Ragflow detected: using $TEST_DIR for pytest to avoid environment variable requirements"
+    fi
+
+    # Special handling for langchain monorepo
+    # langchain's tests are in libs/langchain/tests
+    if [ "$REPO" = "langchain" ] && [ -d "libs/langchain/tests" ]; then
+        TEST_DIR="libs/langchain/tests"
+        IGNORE_E2E=""
+        IGNORE_RUNTIME=""
+        echo "📁 Langchain monorepo detected: using $TEST_DIR"
+    fi
 else
     # Default to tests if detection fails
     TEST_DIR="tests"
     IGNORE_E2E="--ignore=$TEST_DIR/e2e"
     IGNORE_RUNTIME="--ignore=$TEST_DIR/runtime"
     echo "⚠️  Failed to clone repo, defaulting to tests"
+
+    # Special handling for known monorepos even when clone fails
+    if [ "$REPO" = "langchain" ]; then
+        TEST_DIR="libs/langchain/tests"
+        IGNORE_E2E=""
+        IGNORE_RUNTIME=""
+        echo "📁 Langchain monorepo detected: using $TEST_DIR"
+    fi
 fi
 
-cd "$PROJ_ROOT"
-rm -rf "$TEMP_REPO_DIR"
+cd "$PROJ_ROOT" || true
+rm -rf "$TEMP_REPO_DIR" || true
 
 export TEST_DIR
 export IGNORE_E2E
@@ -127,13 +168,14 @@ fi
 if [ -z "$PYTHON_VERSION" ]; then
     # Fetch pyproject.toml from GitHub and extract requires-python
     PYPROJECT_URL="https://raw.githubusercontent.com/$ORG/$REPO/$PR_BASE_SHA/pyproject.toml"
-    PYPROJECT_CONTENT=$(curl -sL --retry 3 --connect-timeout 10 "$PYPROJECT_URL" 2>/dev/null || echo "")
+    PYPROJECT_CONTENT=$(curl -sL --retry 3 --connect-timeout 10 --max-time 30 "$PYPROJECT_URL" 2>/dev/null || echo "")
     if [ -n "$PYPROJECT_CONTENT" ]; then
         # Extract requires-python value (e.g., ">=3.12,<3.14" -> "3.12")
-        REQUIRES_PYTHON=$(echo "$PYPROJECT_CONTENT" | grep -i '^requires-python' | sed -n 's/^requires-python[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+        # Use || true to prevent exit on grep failure with set -e
+        REQUIRES_PYTHON=$(echo "$PYPROJECT_CONTENT" | grep -i '^requires-python' | sed -n 's/^requires-python[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' | head -1 || true)
         if [ -n "$REQUIRES_PYTHON" ]; then
             # Extract minimum version from range (e.g., ">=3.12,<3.14" -> "3.12")
-            PYTHON_VERSION=$(echo "$REQUIRES_PYTHON" | grep -oE '[0-9]+\.[0-9]+' | head -1)
+            PYTHON_VERSION=$(echo "$REQUIRES_PYTHON" | grep -oE '[0-9]+\.[0-9]+' | head -1 || true)
         fi
     fi
 fi
@@ -352,22 +394,34 @@ echo "=== Installing package in editable mode ==="
 pip install -e . || echo "pip install -e . failed"
 ###ACTION_DELIMITER###
 echo "=== Installing test dependencies ==="
-pip install pytest pytest-mock coverage colorama || echo "pip install test deps failed"
+pip install pytest pytest-mock coverage colorama syrupy || echo "pip install test deps failed"
 ###ACTION_DELIMITER###
 echo "=== Auto-detecting and installing missing dependencies ==="
-# Run a quick collection check to find missing modules
+# Run a quick collection check to find missing dependencies
 echo "Running pytest --collect-only to detect missing dependencies..."
-MISSING_DEPS=$(python -m pytest --collect-only $TEST_DIR/ $IGNORE_E2E $IGNORE_RUNTIME 2>&1 | grep "ModuleNotFoundError: No module named" | sed "s/.*No module named '\(.*\)'/\1/" | sed 's/"//g' | sort -u || true)
+MISSING_DEPS=$(python -m pytest --collect-only $TEST_DIR/ $IGNORE_E2E $IGNORE_RUNTIME 2>&1 | \
+    grep "ModuleNotFoundError: No module named" | \
+    grep -oE "No module named '[a-zA-Z0-9_]+'" | \
+    sed "s/No module named '//g" | \
+    sed "s/'//g" | \
+    sort -u || true)
 if [ -n "$MISSING_DEPS" ]; then
     echo "Found missing modules:"
     echo "$MISSING_DEPS"
     echo "Installing missing dependencies..."
     # Map common module names to package names
     for module in $MISSING_DEPS; do
+        # Skip empty or invalid module names
+        if [ -z "$module" ] || [[ "$module" =~ ^[^a-zA-Z0-9] ]]; then
+            continue
+        fi
         case "$module" in
             dotenv) pip install python-dotenv || true ;;
             httpx) pip install httpx || true ;;
             litellm) pip install litellm || true ;;
+            freezegun) pip install freezegun || true ;;
+            aiohttp) pip install aiohttp || true ;;
+            xxhash) pip install xxhash || true ;;
             *) pip install "$module" || echo "Failed to install $module" ;;
         esac
     done
@@ -434,6 +488,39 @@ export PYTHONUNBUFFERED=1
 export PYTHONIOENCODING=utf-8
 find . -type d -name __pycache__ -exec rm -rf {{}} + 2>/dev/null || true
 find . -type f -name "*.pyc" -delete 2>/dev/null || true
+
+echo "=== Auto-detecting and installing missing dependencies ==="
+MISSING_DEPS=$(python -m pytest --collect-only $TEST_DIR/ $IGNORE_E2E $IGNORE_RUNTIME 2>&1 | \
+    grep "ModuleNotFoundError: No module named" | \
+    grep -oE "No module named '[a-zA-Z0-9_]+'" | \
+    sed "s/No module named '//g" | \
+    sed "s/'//g" | \
+    sort -u || true)
+if [ -n "$MISSING_DEPS" ]; then
+    echo "Found missing modules:"
+    echo "$MISSING_DEPS"
+    echo "Installing missing dependencies..."
+    for module in $MISSING_DEPS; do
+        # Skip empty or invalid module names
+        if [ -z "$module" ] || [[ "$module" =~ ^[^a-zA-Z0-9] ]]; then
+            continue
+        fi
+        case "$module" in
+            dotenv) pip install python-dotenv || true ;;
+            httpx) pip install httpx || true ;;
+            litellm) pip install litellm || true ;;
+            freezegun) pip install freezegun || true ;;
+            aiohttp) pip install aiohttp || true ;;
+            xxhash) pip install xxhash || true ;;
+            *) pip install "$module" || echo "Failed to install $module" ;;
+        esac
+    done
+    echo "Dependency installation complete"
+else
+    echo "No missing dependencies detected"
+fi
+###ACTION_DELIMITER###
+
 python -u -m pytest -v --tb=short --basetemp=/tmp $TEST_DIR/ $IGNORE_E2E $IGNORE_RUNTIME -p no:warnings | tee /tmp/pytest_output.txt || echo "pytest exited with code: $?"
 echo "=== run.sh completed ==="
 """.replace("[[REPO_NAME]]", repo_name),
@@ -482,6 +569,40 @@ if [ -s /home/test.patch ]; then
 else
     echo "No test.patch to apply (empty or missing)"
 fi
+
+echo "=== Auto-detecting and installing missing dependencies ==="
+# Run a quick collection check to find missing modules
+# Use grep -oE to extract only the module name part with a cleaner pattern
+MISSING_DEPS=$(python -m pytest --collect-only $TEST_DIR/ $IGNORE_E2E $IGNORE_RUNTIME 2>&1 | \
+    grep "ModuleNotFoundError: No module named" | \
+    grep -oE "No module named '[a-zA-Z0-9_]+'" | \
+    sed "s/No module named '//g" | \
+    sed "s/'//g" | \
+    sort -u || true)
+if [ -n "$MISSING_DEPS" ]; then
+    echo "Found missing modules:"
+    echo "$MISSING_DEPS"
+    echo "Installing missing dependencies..."
+    for module in $MISSING_DEPS; do
+        # Skip empty or invalid module names
+        if [ -z "$module" ] || [[ "$module" =~ ^[^a-zA-Z0-9] ]]; then
+            continue
+        fi
+        case "$module" in
+            dotenv) pip install python-dotenv || true ;;
+            httpx) pip install httpx || true ;;
+            litellm) pip install litellm || true ;;
+            freezegun) pip install freezegun || true ;;
+            aiohttp) pip install aiohttp || true ;;
+            xxhash) pip install xxhash || true ;;
+            *) pip install "$module" || echo "Failed to install $module" ;;
+        esac
+    done
+    echo "Dependency installation complete"
+else
+    echo "No missing dependencies detected"
+fi
+###ACTION_DELIMITER###
 
 echo "=== Running pytest ==="
 echo "Command: python -u -m pytest -v --tb=short --basetemp=/tmp $TEST_DIR/ $IGNORE_E2E $IGNORE_RUNTIME -p no:warnings"
@@ -544,6 +665,40 @@ else
         echo "Continuing without patch..."
     fi
 fi
+
+echo "=== Auto-detecting and installing missing dependencies ==="
+# Run a quick collection check to find missing modules
+# Use grep -oE to extract only the module name part with a cleaner pattern
+MISSING_DEPS=$(python -m pytest --collect-only $TEST_DIR/ $IGNORE_E2E $IGNORE_RUNTIME 2>&1 | \
+    grep "ModuleNotFoundError: No module named" | \
+    grep -oE "No module named '[a-zA-Z0-9_]+'" | \
+    sed "s/No module named '//g" | \
+    sed "s/'//g" | \
+    sort -u || true)
+if [ -n "$MISSING_DEPS" ]; then
+    echo "Found missing modules:"
+    echo "$MISSING_DEPS"
+    echo "Installing missing dependencies..."
+    for module in $MISSING_DEPS; do
+        # Skip empty or invalid module names
+        if [ -z "$module" ] || [[ "$module" =~ ^[^a-zA-Z0-9] ]]; then
+            continue
+        fi
+        case "$module" in
+            dotenv) pip install python-dotenv || true ;;
+            httpx) pip install httpx || true ;;
+            litellm) pip install litellm || true ;;
+            freezegun) pip install freezegun || true ;;
+            aiohttp) pip install aiohttp || true ;;
+            xxhash) pip install xxhash || true ;;
+            *) pip install "$module" || echo "Failed to install $module" ;;
+        esac
+    done
+    echo "Dependency installation complete"
+else
+    echo "No missing dependencies detected"
+fi
+###ACTION_DELIMITER###
 
 echo "=== Running pytest ==="
 echo "Command: python -u -m pytest -v --tb=short --basetemp=/tmp $TEST_DIR/ $IGNORE_E2E $IGNORE_RUNTIME -p no:warnings"
@@ -676,7 +831,8 @@ sed -i "" "s/{{REPO}}/$REPO/g"  "$TARGET_FILE" 2>/dev/null || sed -i "s/{{REPO}}
 sed -i "" "s/{{PYTHON_VERSION}}/$PYTHON_VERSION/g"  "$TARGET_FILE" 2>/dev/null || sed -i "s/{{PYTHON_VERSION}}/$PYTHON_VERSION/g" "$TARGET_FILE"
 
 # Replace test directory variables with detected values
-# Escape the variables for sed replacement (they contain / which is the sed delimiter)
+# Use different delimiter and escape $ properly for sed
+echo "📝 Replacing TEST_DIR=$TEST_DIR, IGNORE_E2E=$IGNORE_E2E, IGNORE_RUNTIME=$IGNORE_RUNTIME"
 sed -i "" 's|\$TEST_DIR|'"$TEST_DIR"'|g' "$TARGET_FILE" 2>/dev/null || sed -i 's|\$TEST_DIR|'"$TEST_DIR"'|g' "$TARGET_FILE"
 sed -i "" 's|\$IGNORE_E2E|'"$IGNORE_E2E"'|g' "$TARGET_FILE" 2>/dev/null || sed -i 's|\$IGNORE_E2E|'"$IGNORE_E2E"'|g' "$TARGET_FILE"
 sed -i "" 's|\$IGNORE_RUNTIME|'"$IGNORE_RUNTIME"'|g' "$TARGET_FILE" 2>/dev/null || sed -i 's|\$IGNORE_RUNTIME|'"$IGNORE_RUNTIME"'|g' "$TARGET_FILE"
@@ -718,3 +874,5 @@ if ! grep -q "repos\.$LANG_DIR import" "$REPOS_INIT"; then
     echo "from multi_swe_bench.harness.repos.$LANG_DIR import *" >> "$REPOS_INIT"
     echo "✅ Added import to repos/__init__.py"
 fi
+
+exit 0
