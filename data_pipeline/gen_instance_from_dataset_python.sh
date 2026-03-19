@@ -132,6 +132,15 @@ if [ "$CLONE_SUCCESS" = "true" ]; then
         IGNORE_RUNTIME=""
         echo "📁 Langchain monorepo detected: using $TEST_DIR"
     fi
+
+    # Special handling for langflow
+    # langflow's tests are in src/backend/tests
+    if [ "$REPO" = "langflow" ] && [ -d "src/backend/tests" ]; then
+        TEST_DIR="src/backend/tests"
+        IGNORE_E2E=""
+        IGNORE_RUNTIME=""
+        echo "📁 Langflow detected: using $TEST_DIR"
+    fi
 else
     # Default to tests if detection fails
     TEST_DIR="tests"
@@ -145,6 +154,13 @@ else
         IGNORE_E2E=""
         IGNORE_RUNTIME=""
         echo "📁 Langchain monorepo detected: using $TEST_DIR"
+    fi
+
+    if [ "$REPO" = "langflow" ]; then
+        TEST_DIR="src/backend/tests"
+        IGNORE_E2E=""
+        IGNORE_RUNTIME=""
+        echo "📁 Langflow detected: using $TEST_DIR"
     fi
 fi
 
@@ -394,7 +410,7 @@ echo "=== Installing package in editable mode ==="
 pip install -e . || echo "pip install -e . failed"
 ###ACTION_DELIMITER###
 echo "=== Installing test dependencies ==="
-pip install pytest pytest-mock coverage colorama syrupy || echo "pip install test deps failed"
+pip install pytest pytest-mock coverage colorama syrupy hypothesis respx || echo "pip install test deps failed"
 ###ACTION_DELIMITER###
 echo "=== Auto-detecting and installing missing dependencies ==="
 # Run a quick collection check to find missing dependencies
