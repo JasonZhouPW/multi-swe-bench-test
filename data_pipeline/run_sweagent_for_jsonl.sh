@@ -25,7 +25,11 @@ if command -v jq >/dev/null 2>&1; then
       :
     else
       mkdir -p "$(dirname "$clone_dir")"
-      git clone "https://github.com/$org/$repo.git" "$clone_dir"
+      # Use timeout to avoid hanging on network issues (full clone, no --depth)
+      timeout 600 git clone "https://github.com/$org/$repo.git" "$clone_dir" || {
+        echo "⚠️  Git clone failed or timed out for $org/$repo, skipping..."
+        continue
+      }
     fi
     log_file="$(mktemp)"
     echo "log file:$log_file"
@@ -72,7 +76,11 @@ else
       :
     else
       mkdir -p "$(dirname "$clone_dir")"
-      git clone "https://github.com/$org/$repo.git" "$clone_dir"
+      # Use timeout to avoid hanging on network issues (full clone, no --depth)
+      timeout 600 git clone "https://github.com/$org/$repo.git" "$clone_dir" || {
+        echo "⚠️  Git clone failed or timed out for $org/$repo, skipping..."
+        continue
+      }
     fi
     log_file="$(mktemp)"
     echo "log file:$log_file"

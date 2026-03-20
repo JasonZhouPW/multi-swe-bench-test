@@ -60,9 +60,28 @@ rm -rf "$TEMP_REPO_DIR"/*
 cd "$TEMP_REPO_DIR"
 CLONE_SUCCESS=false
 
-# Try clone with timeout (use perl with system instead of exec for proper exit code)
+# Git clone with timeout and retry logic
+# Uses perl alarm for timeout (60 seconds per attempt)
+git_clone_with_timeout() {
+    local retry_count=3
+    local attempt=1
+    while [ $attempt -le $retry_count ]; do
+        echo "🔄 Git clone attempt $attempt/$retry_count for https://github.com/$ORG/$REPO.git"
+        if perl -e 'alarm shift; exit(system(@ARGV) >> 8)' 60 git clone "$@" 2>/dev/null; then
+            echo "✅ Git clone successful on attempt $attempt"
+            return 0
+        fi
+        echo "⚠️  Attempt $attempt failed, retrying in 2 seconds..."
+        sleep 2
+        attempt=$((attempt + 1))
+    done
+    echo "❌ Git clone failed after $retry_count attempts"
+    return 1
+}
+
+# Try clone with timeout and retry (use perl with system instead of exec for proper exit code)
 for branch in master main devel; do
-    if perl -e 'alarm shift; exit(system(@ARGV) >> 8)' 60 git clone --depth 1 --branch "$branch" https://github.com/$ORG/$REPO.git . 2>/dev/null; then
+    if git_clone_with_timeout --branch "$branch" https://github.com/$ORG/$REPO.git .; then
         CLONE_SUCCESS=true
         break
     fi
@@ -70,7 +89,7 @@ done
 
 # If no branch worked, try without specifying branch
 if [ "$CLONE_SUCCESS" = "false" ]; then
-    if perl -e 'alarm shift; exit(system(@ARGV) >> 8)' 60 git clone --depth 1 https://github.com/$ORG/$REPO.git . 2>/dev/null; then
+    if git_clone_with_timeout https://github.com/$ORG/$REPO.git .; then
         CLONE_SUCCESS=true
     fi
 fi
@@ -306,7 +325,8 @@ class ImageBase(Image):
             image_name = image_name.image_full_name()
 
         if self.config.need_clone:
-            code = f"""RUN apt-get update && apt-get install -y git && git clone https://github.com/{self.pr.org}/{self.pr.repo}.git /home/{self.pr.repo}"""
+            # Use timeout to avoid hanging on network issues (full clone, no --depth)
+            code = f"""RUN apt-get update && apt-get install -y git && (timeout 600 git clone https://github.com/{self.pr.org}/{self.pr.repo}.git /home/{self.pr.repo} || (echo 'Git clone failed or timed out' && exit 1))"""
         else:
             code = f"COPY {self.pr.repo} /home/{self.pr.repo}"
 

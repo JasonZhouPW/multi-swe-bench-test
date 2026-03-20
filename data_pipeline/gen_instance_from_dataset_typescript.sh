@@ -150,7 +150,8 @@ class ImageBase(Image):
             image_name = image_name.image_full_name()
 
         if self.config.need_clone:
-            code = f"RUN git clone https://github.com/{self.pr.org}/{self.pr.repo}.git /home/{self.pr.repo}"
+            # Use timeout to avoid hanging on network issues (full clone, no --depth)
+            code = f"RUN apt-get update && apt-get install -y git && (timeout 600 git clone https://github.com/{self.pr.org}/{self.pr.repo}.git /home/{self.pr.repo} || (echo 'Git clone failed or timed out' && exit 1))"
         else:
             code = f"COPY {self.pr.repo} /home/{self.pr.repo}"
 
