@@ -36,43 +36,84 @@ def exists(image_name: str) -> bool:
 
 
 def build(
-    workdir: Path, dockerfile_name: str, image_full_name: str, logger: logging.Logger
+    workdir: Path,
+    dockerfile_name: str,
+    image_full_name: str,
+    logger: logging.Logger,
+    timeout: int = 3600,
+    retries: int = 2,
 ):
+    """Build a Docker image with retry support
+
+    Args:
+        workdir: Working directory path
+        dockerfile_name: Name of the Dockerfile
+        image_full_name: Full name of the image to build
+        logger: Logger instance
+        timeout: Timeout in seconds for the build operation (default: 3600 = 1 hour)
+        retries: Number of retry attempts on failure (default: 2)
+    """
     workdir = str(workdir)
-    logger.info(
-        f"Start building image `{image_full_name}`, working directory is `{workdir}`"
-    )
-    try:
-        build_logs = docker_client.api.build(
-            path=workdir,
-            dockerfile=dockerfile_name,
-            tag=image_full_name,
-            rm=True,
-            forcerm=True,
-            nocache=True,
-            decode=True,
-            encoding="utf-8",
+
+    def _do_build():
+        logger.info(
+            f"Start building image `{image_full_name}`, working directory is `{workdir}`"
         )
+        try:
+            build_logs = docker_client.api.build(
+                path=workdir,
+                dockerfile=dockerfile_name,
+                tag=image_full_name,
+                rm=True,
+                forcerm=True,
+                nocache=True,
+                decode=True,
+                encoding="utf-8",
+                timeout=timeout,
+            )
 
-        for log in build_logs:
-            if "stream" in log:
-                logger.info(log["stream"].strip())
-            elif "error" in log:
-                error_message = log["error"].strip()
-                logger.error(f"Docker build error: {error_message}")
-                raise RuntimeError(f"Docker build failed: {error_message}")
-            elif "status" in log:
-                logger.info(log["status"].strip())
-            elif "aux" in log:
-                logger.info(log["aux"].get("ID", "").strip())
+            for log in build_logs:
+                if "stream" in log:
+                    logger.info(log["stream"].strip())
+                elif "error" in log:
+                    error_message = log["error"].strip()
+                    logger.error(f"Docker build error: {error_message}")
+                    raise RuntimeError(f"Docker build failed: {error_message}")
+                elif "status" in log:
+                    logger.info(log["status"].strip())
+                elif "aux" in log:
+                    logger.info(log["aux"].get("ID", "").strip())
 
-        logger.info(f"image({workdir}) build success: {image_full_name}")
-    except docker.errors.BuildError as e:
-        logger.error(f"build error: {e}")
-        raise e
-    except Exception as e:
-        logger.error(f"Unknown build error occurred: {e}")
-        raise e
+            logger.info(f"image({workdir}) build success: {image_full_name}")
+        except docker.errors.BuildError as e:
+            logger.error(f"build error: {e}")
+            raise e
+        except Exception as e:
+            logger.error(f"Unknown build error occurred: {e}")
+            raise e
+
+    # Attempt build with retries
+    attempt = 0
+    last_error = None
+    while attempt <= retries:
+        try:
+            _do_build()
+            return  # Success, exit the function
+        except Exception as e:
+            last_error = e
+            attempt += 1
+            if attempt <= retries:
+                logger.warning(
+                    f"Build failed (attempt {attempt}/{retries + 1}), retrying in 10s..."
+                )
+                import time
+
+                time.sleep(10)
+            else:
+                logger.error(
+                    f"Build failed after {retries + 1} attempts, giving up."
+                )
+                raise last_error
 
 
 def run(

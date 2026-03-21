@@ -148,8 +148,22 @@ def get_parser() -> ArgumentParser:
         "--max_workers_build_image",
         type=int,
         required=False,
-        default=8,
-        help="The maximum number of workers to use for building the image.",
+        default=1,
+        help="The maximum number of workers to use for building the image. Default is 1 (sequential) to reduce resource contention.",
+    )
+    parser.add_argument(
+        "--docker_build_timeout",
+        type=int,
+        required=False,
+        default=3600,
+        help="The timeout in seconds for Docker build operations. Default is 3600 (1 hour).",
+    )
+    parser.add_argument(
+        "--docker_build_retries",
+        type=int,
+        required=False,
+        default=2,
+        help="The number of retry attempts for Docker build failures. Default is 2.",
     )
     parser.add_argument(
         "--max_workers_run_instance",
@@ -268,6 +282,8 @@ class CliArgs:
     run_log: bool = True
     human_mode: bool = True
     agent_timeout: int = 1800
+    docker_build_timeout: int = 3600
+    docker_build_retries: int = 2
 
     def __post_init__(self):
         self._check_mode()
@@ -672,6 +688,8 @@ class CliArgs:
                 self.log_level,
                 False,
             ),
+            timeout=self.docker_build_timeout,
+            retries=self.docker_build_retries,
         )
         self.logger.info(f"Image {image.image_full_name()} built successfully.")
 
@@ -911,6 +929,8 @@ class CliArgs:
                         dockerfile_name="Dockerfile",
                         image_full_name=envagent_image_name,
                         logger=self.logger,
+                        timeout=self.docker_build_timeout,
+                        retries=self.docker_build_retries,
                     )
                     self.logger.info(f"{instance.name()}: image build success")
                 except Exception as e:
