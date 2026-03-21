@@ -148,8 +148,8 @@ def get_parser() -> ArgumentParser:
         "--max_workers_build_image",
         type=int,
         required=False,
-        default=1,
-        help="The maximum number of workers to use for building the image. Default is 1 (sequential) to reduce resource contention.",
+        default=4,
+        help="The maximum number of workers to use for building the image. Default is 4 for balanced concurrency.",
     )
     parser.add_argument(
         "--docker_build_timeout",
