@@ -12,13 +12,9 @@ DATASETS_DIR="$BASE_DIR/data/datasets"
 WORKDIR_DIR="$BASE_DIR/data/workdir"
 FINAL_OUTPUT_DIR="$BASE_DIR/final_output"
 
-# Get current date in YYYY_MM_DD format
-CURRENT_DATE=$(date +%Y_%m_%d)
-
 echo "========================================="
 echo "🗂️  Organizing Datasets"
 echo "========================================="
-echo "Date: $CURRENT_DATE"
 echo "Datasets dir: $DATASETS_DIR"
 echo "Workdir: $WORKDIR_DIR"
 echo "Final output: $FINAL_OUTPUT_DIR"
@@ -46,9 +42,8 @@ echo "📦 Step 2: Processing dataset files..."
 # Create final_output directory if not exists
 mkdir -p "$FINAL_OUTPUT_DIR"
 
-# Create date subdirectory
-DATE_DIR="$FINAL_OUTPUT_DIR/$CURRENT_DATE"
-mkdir -p "$DATE_DIR"
+# Output directly to final_output (no date subdirectory)
+DATE_DIR="$FINAL_OUTPUT_DIR"
 echo "📁 Output directory: $DATE_DIR"
 echo ""
 
