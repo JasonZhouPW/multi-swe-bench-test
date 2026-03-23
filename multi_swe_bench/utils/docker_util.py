@@ -189,6 +189,7 @@ def cleanup_docker_images(
 
     Preserves:
     - All other images including base images
+    - PostgreSQL images (postgres, postgis) - required for database operations
 
     Args:
         org: GitHub organization name
@@ -207,6 +208,16 @@ def cleanup_docker_images(
         images = docker_client.images.list()
         for image in images:
             image_tags = image.tags if image.tags else []
+
+            # Skip PostgreSQL images - needed for database operations
+            is_postgres = False
+            for tag in image_tags:
+                if "postgres" in tag.lower() or "postgis" in tag.lower():
+                    is_postgres = True
+                    break
+
+            if is_postgres:
+                continue
 
             # Check if any tag ends with :pr-{number} pattern
             # Full tag format is like "envagent/ansible_m_ansible:pr-86642"

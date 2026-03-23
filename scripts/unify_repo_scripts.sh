@@ -178,8 +178,8 @@ for RAW_FILE in "${FILES[@]}"; do
     docker container stop $(docker ps -aq) || true
     # 2. Remove all docker containers
     docker container rm $(docker ps -aq) || true
-    # 3. Remove all docker images (exclude mswebench/nix_swe and redis images)
-    docker rmi $( docker images --format "table {{.Repository}}\t{{.ID}}" | grep -v "mswebench/nix_swe" | grep -v "^redis" | awk '{print $2}') || true
+    # 3. Remove all docker images (exclude mswebench/nix_swe, redis, and postgres/postgis images)
+    docker rmi $( docker images --format "table {{.Repository}}\t{{.ID}}" | grep -v "mswebench/nix_swe" | grep -v "^redis" | grep -v "^postgres" | grep -v "^postgis" | awk '{print $2}') || true
 done
 
 ##########################################
