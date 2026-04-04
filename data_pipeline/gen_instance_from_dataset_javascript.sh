@@ -85,7 +85,7 @@ esac
 # Normalize package names
 ###################################################
 ORG_PY=$(echo "$ORG" | tr '-' '_' | tr 'A-Z' 'a-z')
-REPO_PY=$(echo "$REPO" | tr '-' '_' | tr 'A-Z' 'a-z')
+REPO_PY=$(echo "$REPO" | sed -E 's/-/_/g; s/\./_/g' | tr 'A-Z' 'a-z')
 
 CLASS_NAME=$(echo "$REPO_PY" | sed -E 's/(^|_)([a-z])/\U\2/g')
 
@@ -231,15 +231,18 @@ bash /home/check_git_changes.sh
 # Injected setup commands
 __SETUP_COMMANDS_BLOCK__
 
-npm ci || true
-npm install eslint --save-dev""",
+# Install pnpm globally for repos that need it
+npm install -g pnpm
+
+# Try npm ci first, if it fails, try npm install, then yarn, then pnpm
+npm ci --legacy-peer-deps || npm install || yarn install || pnpm install || echo 'Warning: All install methods failed'""".format(pr=self.pr),
             ),
             File(
                 ".",
                 "run.sh",
                 """#!/bin/bash
 cd /home/[[REPO_NAME]]
-npm test -- --verbose 
+npm test
 
 """,
             ),
@@ -254,7 +257,7 @@ if [ -s /home/test.patch ]; then
 else
     echo "No test.patch to apply (empty or missing)"
 fi
-npm test -- --verbose
+npm test
 
 """,
             ),
@@ -272,7 +275,7 @@ else
     # No test.patch, only apply fix.patch
     git apply --exclude package.json --whitespace=nowarn /home/fix.patch
 fi
-npm test -- --verbose
+npm test
 
 """,
             ),
@@ -327,21 +330,25 @@ class InstanceTemplate(Instance):
         skipped_tests = set()
         import re
 
+        # Strip ANSI escape codes from log
+        ansi_escape = re.compile(r'\x1b\[[0-9;]*m')
+        log = ansi_escape.sub('', log)
+
         # Track test names - failed takes precedence over passed
         test_status = {}
 
         # Failed tests first (✖)
         failed_pattern = re.compile(
-            r"^\s*✖\s+(.+?)(?:\s*\(\d+(?:\.\d+)?\s*ms\))?$", re.MULTILINE
+            r"^\s*✖\s+(.+?)(?:\s+\(\d+(?:\.\d+)?\s*ms\))?$", re.MULTILINE
         )
 
         for match in failed_pattern.finditer(log):
             test_name = match.group(1).strip()
             test_status[test_name] = 'failed'
 
-        # Vitest format: "✓ filename.test.ts (X tests) XXms"
+        # Vitest format: "✓ workspace path/to/filename.test.ts (X tests) XXms"
         vitest_pattern = re.compile(
-            r".*[✓✔]\s+([a-zA-Z_/-]+\.test\.(ts|js|jsx))\s+\(\d+\s*tests?\)\s+\d+\.?\d*ms"
+            r".*[✓✔]\s+([a-zA-Z_/.-]+\.test\.(ts|js|jsx))\s+\(\d+\s*tests?\)\s+\d+\.?\d*ms"
         )
 
         for match in vitest_pattern.finditer(log):
@@ -349,15 +356,29 @@ class InstanceTemplate(Instance):
             if test_file not in test_status:
                 test_status[test_file] = 'passed'
 
-        # Standard test framework format (✔ test name XXms)
+        # Standard test framework format (✓ or ✔ test name [XXms])
+        # Handle both checkmark characters and optional timing
         standard_pattern = re.compile(
-            r"^\s*✔\s+(.+?)(?:\s*\(\d+(?:\.\d+)?\s*ms\))?$", re.MULTILINE
+            r"^\s*[✓✔]\s+(.+?)(?:\s+\(\d+(?:\.\d+)?\s*ms\))?$", re.MULTILINE
         )
 
         for match in standard_pattern.finditer(log):
             test_name = match.group(1).strip()
             if test_name not in test_status:
                 test_status[test_name] = 'passed'
+
+        # TAP format (QUnit, TAP): "ok 1 test name" or "not ok 3 test name"
+        tap_pass_pattern = re.compile(r"^\s*ok\s+\d+\s+(.+?)$", re.MULTILINE)
+        for match in tap_pass_pattern.finditer(log):
+            test_name = match.group(1).strip()
+            if test_name not in test_status:
+                test_status[test_name] = 'passed'
+
+        tap_fail_pattern = re.compile(r"^\s*not\s+ok\s+\d+\s+(.+?)$", re.MULTILINE)
+        for match in tap_fail_pattern.finditer(log):
+            test_name = match.group(1).strip()
+            if test_name not in test_status:
+                test_status[test_name] = 'failed'
 
         # Separate into passed and failed sets
         for test_name, status in test_status.items():
@@ -403,6 +424,11 @@ INIT_FILE="$BASE_DIR/__init__.py"
 for pyfile in "$BASE_DIR"/*.py; do
     filename=$(basename "$pyfile" .py)
     if [ "$filename" != "__init__" ]; then
+        # Skip files with dots in the name (e.g., reveal.js.py) - use underscore version instead
+        if [[ "$filename" == *"."* ]]; then
+            # Convert reveal.js.py to reveal_js
+            filename="${filename//./_}"
+        fi
         echo "from multi_swe_bench.harness.repos.$LANG_DIR.$ORG_PY.$filename import *" >> "$INIT_FILE"
     fi
 done
