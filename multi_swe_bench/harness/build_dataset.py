@@ -310,6 +310,7 @@ class CliArgs:
             self._check_output_dir()
         elif self.mode == "instance":
             self._check_repo_dir()
+            self._check_output_dir()
         elif self.mode == "instance_only":
             pass
         elif self.mode == "image":

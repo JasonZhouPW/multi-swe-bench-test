@@ -17,7 +17,7 @@ import glob
 import logging
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Dict, Literal, Optional, Tuple, Union
+from typing import Callable, Dict, Literal, Optional, Tuple, Union
 
 from dataclasses_json import dataclass_json
 from tqdm import tqdm
@@ -121,6 +121,13 @@ def get_parser() -> ArgumentParser:
         default=True,
         help="Whether to regenerate the reports.",
     )
+    parser.add_argument(
+        "--incremental_pr",
+        type=str,
+        required=False,
+        default=None,
+        help="PR ID (org/repo#number) to process incrementally. When set, only this PR is processed and immediately written to dataset file.",
+    )
 
     return parser
 
@@ -140,6 +147,7 @@ class CliArgs:
     log_level: str
     log_to_console: bool
     regen: bool = True
+    incremental_pr: Optional[str] = None
 
     def __post_init__(self):
         self._check_mode()
@@ -362,6 +370,9 @@ class CliArgs:
                                 continue
                             if self.check_skip(task.id):
                                 continue
+                            # If incremental_pr is set, only collect that specific PR
+                            if self.incremental_pr and task.id != self.incremental_pr:
+                                continue
                             tasks.append(task)
                         except ValueError:
                             continue
@@ -372,7 +383,9 @@ class CliArgs:
         return tasks
 
     def gen_reports(
-        self, tasks: list[ReportTask]
+        self,
+        tasks: list[ReportTask],
+        on_valid_report: Callable[["Report"], None] = None,
     ) -> tuple[list[Report], list[ReportTask]]:
         reports: list[Report] = []
         invalid_reports: list[Report] = []
@@ -414,6 +427,9 @@ class CliArgs:
                 report, valid = result
                 if valid:
                     reports.append(report)
+                    # Call the callback immediately if provided (for incremental writes)
+                    if on_valid_report:
+                        on_valid_report(report)
                 else:
                     invalid_reports.append(report)
 
@@ -544,34 +560,63 @@ class CliArgs:
 
     def run_dataset(self):
         tasks = self.collect_report_tasks()
-        reports, invalid_reports, failed_tasks = self.gen_reports(tasks)
-        final_report = FinalReport.from_reports(reports, invalid_reports, failed_tasks)
-        with open(self.output_dir / FINAL_REPORT_FILE, "w", encoding="utf-8") as f:
-            f.write(final_report.json())
 
-        dataset: dict[str, list[Dataset]] = {}
-        for report in reports:
-            if report.id not in self.raw_dataset:
-                continue
-            if report.repo_file_name not in dataset:
-                dataset[report.repo_file_name] = []
-            dataset[report.repo_file_name].append(
-                Dataset.build(self.raw_dataset[report.id], report)
-            )
+        # Incremental mode: write each valid report immediately
+        if self.incremental_pr:
+            import threading
 
-        for repo_file_name in dataset:
-            dataset[repo_file_name].sort(reverse=True)
-            output_file = self.output_dir / f"{repo_file_name}_dataset.jsonl"
-            # 如果文件已存在，使用追加模式，否则创建新文件
-            mode = "a" if output_file.exists() else "w"
-            with open(
-                output_file,
-                mode,
-                encoding="utf-8",
-            ) as f:
-                for data in dataset[repo_file_name]:
-                    f.write(data.json())
-                    f.write("\n")
+            write_lock = threading.Lock()
+
+            def on_valid_report(report: "Report"):
+                if report.id not in self.raw_dataset:
+                    return
+                dataset_record = Dataset.build(self.raw_dataset[report.id], report)
+                output_file = self.output_dir / f"{report.repo_file_name}_dataset.jsonl"
+                with write_lock:
+                    mode = "a" if output_file.exists() else "w"
+                    with open(output_file, mode, encoding="utf-8") as f:
+                        f.write(dataset_record.json())
+                        f.write("\n")
+                self.logger.info(f"Incremental write: {report.id} -> {output_file}")
+
+            reports, invalid_reports, failed_tasks = self.gen_reports(tasks, on_valid_report=on_valid_report)
+            # For incremental mode, we still update the final report
+            # but we append to it rather than overwriting
+            final_report = FinalReport.from_reports(reports, invalid_reports, failed_tasks)
+            final_report_file = self.output_dir / FINAL_REPORT_FILE
+            mode = "a" if final_report_file.exists() else "w"
+            with open(final_report_file, mode, encoding="utf-8") as f:
+                f.write(final_report.to_json(indent=4, ensure_ascii=False))
+        else:
+            # Batch mode: collect all reports first, then write
+            reports, invalid_reports, failed_tasks = self.gen_reports(tasks)
+            final_report = FinalReport.from_reports(reports, invalid_reports, failed_tasks)
+            with open(self.output_dir / FINAL_REPORT_FILE, "w", encoding="utf-8") as f:
+                f.write(final_report.json())
+
+            dataset: dict[str, list[Dataset]] = {}
+            for report in reports:
+                if report.id not in self.raw_dataset:
+                    continue
+                if report.repo_file_name not in dataset:
+                    dataset[report.repo_file_name] = []
+                dataset[report.repo_file_name].append(
+                    Dataset.build(self.raw_dataset[report.id], report)
+                )
+
+            for repo_file_name in dataset:
+                dataset[repo_file_name].sort(reverse=True)
+                output_file = self.output_dir / f"{repo_file_name}_dataset.jsonl"
+                # 如果文件已存在，使用追加模式，否则创建新文件
+                mode = "a" if output_file.exists() else "w"
+                with open(
+                    output_file,
+                    mode,
+                    encoding="utf-8",
+                ) as f:
+                    for data in dataset[repo_file_name]:
+                        f.write(data.json())
+                        f.write("\n")
 
     def run(self):
         if self.mode == "regen":

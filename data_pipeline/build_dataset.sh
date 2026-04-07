@@ -53,12 +53,13 @@ TEMP_DIR="$PROJ_ROOT/data/temp_dataset"
 mkdir -p "$WORKDIR" "$OUTPUT_DIR" "$LOG_DIR" "$REPO_DIR" "$TEMP_DIR"
 
 FINAL_OUTPUT="${OUTPUT_DIR}/${BASE_NAME}_dataset.jsonl"
-: > "$FINAL_OUTPUT"
+# Use >> to append instead of > to truncate (preserve existing data)
+: >> "$FINAL_OUTPUT"
 
 # Initialize processing log
 PROCESSING_LOG="${LOG_DIR}/${BASE_NAME}_processing.log"
 TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
-echo "========================================" > "$PROCESSING_LOG"
+echo "========================================" >> "$PROCESSING_LOG"
 echo "Processing Log: $BASE_NAME" >> "$PROCESSING_LOG"
 echo "Started: $TIMESTAMP" >> "$PROCESSING_LOG"
 echo "========================================" >> "$PROCESSING_LOG"
@@ -68,6 +69,7 @@ echo "" >> "$PROCESSING_LOG"
 TOTAL_COUNT=0
 SUCCESS_COUNT=0
 FAIL_COUNT=0
+SKIP_COUNT=0
 
 echo "🚀 Multi-record dataset builder"
 echo "📌 Input file: $RAW_PATH"
@@ -105,6 +107,30 @@ while IFS= read -r LINE; do
     PR_NUMBER=$(echo "$LINE" | jq -r '.number // "unknown"')
     PR_ID="${PR_ORG}/${PR_REPO}#${PR_NUMBER}"
 
+    # Check if this PR already exists in the final output file (skip duplicates)
+    # Use Python for reliable JSON parsing instead of grep
+    if [ -s "$FINAL_OUTPUT" ]; then
+        EXISTS=$(python3 -c "
+import json, sys
+pr_key = '${PR_ORG}/${PR_REPO}#${PR_NUMBER}'
+with open('${FINAL_OUTPUT}') as f:
+    for line in f:
+        try:
+            d = json.loads(line)
+            if f\"{d.get('org','')}/{d.get('repo','')}#{d.get('number','')}\" == pr_key:
+                print('yes')
+                break
+        except: pass
+" 2>/dev/null)
+        if [ "$EXISTS" = "yes" ]; then
+            echo "⏭️  Skipping record #$index ($PR_ID) - already exists in dataset"
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] ⏭️ SKIP | $PR_ID | Record #$index | Already exists" >> "$PROCESSING_LOG"
+            SKIP_COUNT=$((SKIP_COUNT + 1))
+            index=$((index + 1))
+            continue
+        fi
+    fi
+
     RECORD_START=$(date '+%Y-%m-%d %H:%M:%S')
     TOTAL_COUNT=$((TOTAL_COUNT + 1))
 
@@ -126,7 +152,7 @@ while IFS= read -r LINE; do
     ##########################################
     cat > "$CONFIG_FILE" << EOF
 {
-    "mode": "dataset",
+    "mode": "instance",
     "workdir": "$WORKDIR",
     "raw_dataset_files": [
         "$TEMP_RAW_FILE"
@@ -168,6 +194,21 @@ EOF
 
         # Log success
         echo "[$RECORD_END] ✅ SUCCESS | $PR_ID | Record #$index" >> "$PROCESSING_LOG"
+
+        # Incremental dataset write: call gen_report with --incremental_pr
+        # Note: task.id format is {org}/{repo}:pr-{number}
+        INCREMENTAL_PR_ID="${PR_ORG}/${PR_REPO}:pr-${PR_NUMBER}"
+        echo "📝 Incrementally writing dataset for $INCREMENTAL_PR_ID..."
+        python -m multi_swe_bench.harness.gen_report \
+            --mode dataset \
+            --workdir "$WORKDIR" \
+            --output_dir "$OUTPUT_DIR" \
+            --raw_dataset_files "$RAW_PATH" \
+            --incremental_pr "$INCREMENTAL_PR_ID" \
+            --max_workers 1 \
+            --log_dir "$LOG_DIR" \
+            --log_level INFO \
+            --log_to_console True
     else
         echo "❌ Failed: record #$index ($PR_ID)"
         FAIL_COUNT=$((FAIL_COUNT + 1))
@@ -215,7 +256,7 @@ EOF
 
     # Show progress
     echo ""
-    echo "📊 Progress: $((index + 1))/$LINE_COUNT | ✅ $SUCCESS_COUNT | ❌ $FAIL_COUNT"
+    echo "📊 Progress: $((index + 1))/$LINE_COUNT | ✅ $SUCCESS_COUNT | ❌ $FAIL_COUNT | ⏭️ $SKIP_COUNT"
 
     index=$((index + 1))
     echo ""
@@ -243,11 +284,12 @@ echo "Finished: $END_TIMESTAMP" >> "$PROCESSING_LOG"
 echo "Total records: $TOTAL_COUNT" >> "$PROCESSING_LOG"
 echo "Successful: $SUCCESS_COUNT" >> "$PROCESSING_LOG"
 echo "Failed: $FAIL_COUNT" >> "$PROCESSING_LOG"
+echo "Skipped: $SKIP_COUNT" >> "$PROCESSING_LOG"
 echo "Success rate: ${SUCCESS_RATE}%" >> "$PROCESSING_LOG"
 
 echo "======================================="
 echo "🎉 Multi-record dataset build completed"
 echo "📦 Output file: $FINAL_OUTPUT"
 echo "📝 Processing log: $PROCESSING_LOG"
-echo "📊 Summary: $SUCCESS_COUNT/$TOTAL_COUNT records succeeded (${SUCCESS_RATE}%)"
+echo "📊 Summary: $SUCCESS_COUNT/$TOTAL_COUNT succeeded, $SKIP_COUNT skipped, $FAIL_COUNT failed (${SUCCESS_RATE}%)"
 echo "======================================="
