@@ -237,32 +237,73 @@ bash /home/check_git_changes.sh
 echo "Second git check done"
 
 # Injected setup commands
+# Check for Python backend with poetry
+if [ -f backend/poetry.lock ]; then
+    echo "Installing poetry for Python backend..."
+    apt-get update && apt-get install -y python3-pip
+    pip3 install --break-system-packages poetry || python3 -m pip install --break-system-packages poetry || true
+    echo "Poetry installed"
+    cd /home/[[REPO_NAME]]/backend
+    poetry install || python3 -m poetry install || true
+    echo "Poetry install done"
+    cd /home/[[REPO_NAME]]
+fi
+
+# Check for bazel/Bazelisk (Angular uses bazel for testing)
+if [ -f "BUILD.bazel" ] || [ -d "bazel" ] || grep -q "bazelisk" package.json 2>/dev/null; then
+    echo "Installing bazelisk for bazel testing..."
+    apt-get update && apt-get install -y wget
+    wget -O /usr/local/bin/bazelisk https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-arm64
+    chmod +x /usr/local/bin/bazelisk
+    ln -sf /usr/local/bin/bazelisk /usr/local/bin/bazel
+    echo "Bazelisk installed"
+fi
 
 
 if [ -f package.json ] && grep -q '"packageManager"' package.json && grep -q 'pnpm' package.json; then
     echo "Using pnpm"
     npm install -g pnpm@latest-10 || true
     echo "Pnpm installed"
-    pnpm install || true
+    pnpm install --strict-peer-dependencies=false || true
     echo "Pnpm install done"
-    pnpm add eslint --save-dev -w || true
+    pnpm add eslint --save-dev -w --strict-peer-dependencies=false || true
     echo "Eslint added with pnpm"
+elif [ -f package.json ] && grep -q '"packageManager"' package.json && grep -q 'yarn' package.json; then
+    echo "Using yarn"
+    npm install -g yarn || true
+    echo "Yarn installed"
+    yarn install || true
+    echo "Yarn install done"
+elif [ -f yarn.lock ]; then
+    echo "Using yarn (found yarn.lock)"
+    npm install -g yarn || true
+    echo "Yarn installed"
+    yarn install || yarn || true
+    echo "Yarn install done"
 else
     echo "Using npm"
-    npm ci || true
+    npm ci --legacy-peer-deps || true
     echo "Npm ci done"
-    npm install eslint --save-dev
-    echo "Eslint added with npm"
 fi
 echo "Prepare.sh completed successfully"
-""",
+""".format(pr=self.pr),
             ),
             File(
                 ".",
                 "run.sh",
                 """#!/bin/bash
 cd /home/[[REPO_NAME]]
-npm test
+# Angular uses bazel for testing
+if [ -f "BUILD.bazel" ] || [ -d "bazel" ] || grep -q "bazelisk" package.json 2>/dev/null; then
+    bazelisk test //packages/... //tools/... //modules/... 2>&1 || true
+elif [ -f backend/poetry.lock ]; then
+    export PATH="$HOME/.local/bin:$PATH"
+    cd backend && (poetry run pytest || python3 -m poetry run pytest)
+elif [ -f yarn.lock ] || grep -q '"packageManager"' package.json 2>/dev/null && grep -q 'yarn' package.json 2>/dev/null; then
+    CI=true yarn test:app || CI=true yarn test || CI=true yarn run test || true
+else
+    npm test
+fi
 
 """,
             ),
@@ -277,7 +318,17 @@ if [ -s /home/test.patch ]; then
 else
     echo "No test.patch to apply (empty or missing)"
 fi
-npm test
+# Angular uses bazel for testing
+if [ -f "BUILD.bazel" ] || [ -d "bazel" ] || grep -q "bazelisk" package.json 2>/dev/null; then
+    bazelisk test //packages/... //tools/... //modules/... 2>&1 || true
+elif [ -f backend/poetry.lock ]; then
+    export PATH="$HOME/.local/bin:$PATH"
+    cd backend && (poetry run pytest || python3 -m poetry run pytest)
+elif [ -f yarn.lock ] || grep -q '"packageManager"' package.json 2>/dev/null && grep -q 'yarn' package.json 2>/dev/null; then
+    CI=true yarn test:app || CI=true yarn test || CI=true yarn run test || true
+else
+    npm test
+fi
 
 """,
             ),
@@ -295,7 +346,17 @@ else
     # No test.patch, only apply fix.patch
     git apply --exclude package.json --whitespace=nowarn /home/fix.patch
 fi
-npm test
+# Angular uses bazel for testing
+if [ -f "BUILD.bazel" ] || [ -d "bazel" ] || grep -q "bazelisk" package.json 2>/dev/null; then
+    bazelisk test //packages/... //tools/... //modules/... 2>&1 || true
+elif [ -f backend/poetry.lock ]; then
+    export PATH="$HOME/.local/bin:$PATH"
+    cd backend && (poetry run pytest || python3 -m poetry run pytest)
+elif [ -f yarn.lock ] || grep -q '"packageManager"' package.json 2>/dev/null && grep -q 'yarn' package.json 2>/dev/null; then
+    CI=true yarn test:app || CI=true yarn test || CI=true yarn run test || true
+else
+    npm test
+fi
 
 """,
             ),
@@ -353,9 +414,59 @@ class InstanceTemplate(Instance):
         # Track test names - failed takes precedence over passed
         test_status = {}
 
+        # Bazel format: "//target:name   PASSED" or "FAILED"
+        bazel_pattern = re.compile(r"^//(.+?)\s+(PASSED|FAILED|TIMEOUT)", re.MULTILINE)
+        for match in bazel_pattern.finditer(log):
+            target = match.group(1).strip()
+            status = match.group(2).strip().lower()
+            test_status[target] = status
+
+        # Bazel summary: "3 tests passed, 1 failed"
+        bazel_summary = re.compile(r"(\d+)\s+tests?\s+passed.*?(\d+)\s+tests?\s+failed", re.MULTILINE)
+        for match in bazel_summary.finditer(log):
+            if not test_status:
+                num_passed = int(match.group(1))
+                num_failed = int(match.group(2))
+                for i in range(num_passed):
+                    test_status[f"bazel_test_{i}"] = 'passed'
+                for i in range(num_failed):
+                    test_status[f"bazel_failed_{i}"] = 'failed'
+
+        # Bazel "Executed X tests" format
+        bazel_executed = re.compile(r"Executed\s+(\d+)\s+tests?", re.MULTILINE)
+        for match in bazel_executed.finditer(log):
+            if not test_status:
+                num_tests = int(match.group(1))
+                for i in range(num_tests):
+                    test_status[f"bazel_test_{i}"] = 'passed'
+
+        # Pytest format: "test_file.py::test_function PASSED/FAILED/SKIPPED"
+        pytest_pattern = re.compile(
+            r"^(\S+\.py::\S+)\s+(PASSED|FAILED|SKIPPED)", re.MULTILINE
+        )
+
+        for match in pytest_pattern.finditer(log):
+            test_name = match.group(1).strip()
+            status = match.group(2).strip().lower()
+            test_status[test_name] = status
+
+        # Pytest short summary: "2 passed, 1 failed"
+        pytest_summary_pattern = re.compile(
+            r"(\d+)\s+passed.*?(\d+)\s+failed", re.MULTILINE
+        )
+        for match in pytest_summary_pattern.finditer(log):
+            # If we found a summary but no individual tests, use generic names
+            if not test_status:
+                num_passed = int(match.group(1))
+                num_failed = int(match.group(2))
+                for i in range(num_passed):
+                    test_status[f"test_{i}"] = 'passed'
+                for i in range(num_failed):
+                    test_status[f"failed_test_{i}"] = 'failed'
+
         # Failed tests first (✖)
         failed_pattern = re.compile(
-            r"^\s*✖\s+(.+?)(?:\s*\(\d+(?:\.\d+)?\s*ms\))?$", re.MULTILINE
+            r"^\s*✖\s+(.+?)(?:\s+\(\d+(?:\.\d+)?\s*ms\))?$", re.MULTILINE
         )
 
         for match in failed_pattern.finditer(log):
@@ -372,9 +483,10 @@ class InstanceTemplate(Instance):
             if test_file not in test_status:
                 test_status[test_file] = 'passed'
 
-        # Standard test framework format (✔ test name XXms)
+        # Standard test framework format (✓ or ✔ test name [XXms])
+        # Handle both checkmark characters and optional timing
         standard_pattern = re.compile(
-            r"^\s*✔\s+(.+?)(?:\s*\(\d+(?:\.\d+)?\s*ms\))?$", re.MULTILINE
+            r"^\s*[✓✔]\s+(.+?)(?:\s+\(\d+(?:\.\d+)?\s*ms\))?$", re.MULTILINE
         )
 
         for match in standard_pattern.finditer(log):
@@ -386,8 +498,10 @@ class InstanceTemplate(Instance):
         for test_name, status in test_status.items():
             if status == 'passed':
                 passed_tests.add(test_name)
-            else:
+            elif status == 'failed':
                 failed_tests.add(test_name)
+            else:
+                skipped_tests.add(test_name)
 
         return TestResult(
             passed_count=len(passed_tests),
@@ -426,6 +540,11 @@ INIT_FILE="$BASE_DIR/__init__.py"
 for pyfile in "$BASE_DIR"/*.py; do
     filename=$(basename "$pyfile" .py)
     if [ "$filename" != "__init__" ]; then
+        # Skip files with dots in the name (e.g., reveal.js.py) - use underscore version instead
+        if [[ "$filename" == *"."* ]]; then
+            # Convert reveal.js.py to reveal_js
+            filename="${filename//./_}"
+        fi
         echo "from multi_swe_bench.harness.repos.$LANG_DIR.$ORG_PY.$filename import *" >> "$INIT_FILE"
     fi
 done
