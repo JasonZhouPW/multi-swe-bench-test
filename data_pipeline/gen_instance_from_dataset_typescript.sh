@@ -483,6 +483,31 @@ class InstanceTemplate(Instance):
             if test_file not in test_status:
                 test_status[test_file] = 'passed'
 
+        # Jest format: "PASS" or "FAIL" with test name
+        jest_pattern = re.compile(r"^(PASS|FAIL)\s+(.+?)\.test\.(ts|tsx|js|jsx)$", re.MULTILINE)
+        for match in jest_pattern.finditer(log):
+            status = match.group(1).strip().lower()
+            test_file = f"{match.group(2)}.test.{match.group(3)}"
+            test_status[test_file] = status
+
+        # Jest individual test: "✓ test name (5ms)" or "✕ test name (10ms)"
+        jest_test_pattern = re.compile(r"^\s*[✓✔✕]\s+(.+?)\s+\(\d+\.?\d*\s*ms\)\s*$", re.MULTILINE)
+        for match in jest_test_pattern.finditer(log):
+            test_name = match.group(1).strip()
+            status = 'passed' if '✓' in match.group(0) or '✔' in match.group(0) else 'failed'
+            test_status[test_name] = status
+
+        # Jest summary: "Tests: 5 passed, 1 failed, 6 total"
+        jest_summary_pattern = re.compile(r"Tests:\s+(\d+)\s+passed.*?(\d+)\s+failed", re.MULTILINE)
+        for match in jest_summary_pattern.finditer(log):
+            if not test_status:
+                num_passed = int(match.group(1))
+                num_failed = int(match.group(2))
+                for i in range(num_passed):
+                    test_status[f"jest_test_{i}"] = 'passed'
+                for i in range(num_failed):
+                    test_status[f"jest_failed_{i}"] = 'failed'
+
         # Standard test framework format (✓ or ✔ test name [XXms])
         # Handle both checkmark characters and optional timing
         standard_pattern = re.compile(
