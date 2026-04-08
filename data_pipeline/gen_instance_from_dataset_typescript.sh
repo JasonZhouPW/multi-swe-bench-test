@@ -300,7 +300,7 @@ elif [ -f backend/poetry.lock ]; then
     export PATH="$HOME/.local/bin:$PATH"
     cd backend && (poetry run pytest || python3 -m poetry run pytest)
 elif [ -f yarn.lock ] || grep -q '"packageManager"' package.json 2>/dev/null && grep -q 'yarn' package.json 2>/dev/null; then
-    CI=true yarn test:app || CI=true yarn test || CI=true yarn run test || true
+    CI=true yarn test:unit || CI=true yarn test:app || CI=true yarn test || CI=true yarn run test || true
 else
     npm test
 fi
@@ -325,7 +325,7 @@ elif [ -f backend/poetry.lock ]; then
     export PATH="$HOME/.local/bin:$PATH"
     cd backend && (poetry run pytest || python3 -m poetry run pytest)
 elif [ -f yarn.lock ] || grep -q '"packageManager"' package.json 2>/dev/null && grep -q 'yarn' package.json 2>/dev/null; then
-    CI=true yarn test:app || CI=true yarn test || CI=true yarn run test || true
+    CI=true yarn test:unit || CI=true yarn test:app || CI=true yarn test || CI=true yarn run test || true
 else
     npm test
 fi
@@ -353,7 +353,7 @@ elif [ -f backend/poetry.lock ]; then
     export PATH="$HOME/.local/bin:$PATH"
     cd backend && (poetry run pytest || python3 -m poetry run pytest)
 elif [ -f yarn.lock ] || grep -q '"packageManager"' package.json 2>/dev/null && grep -q 'yarn' package.json 2>/dev/null; then
-    CI=true yarn test:app || CI=true yarn test || CI=true yarn run test || true
+    CI=true yarn test:unit || CI=true yarn test:app || CI=true yarn test || CI=true yarn run test || true
 else
     npm test
 fi
