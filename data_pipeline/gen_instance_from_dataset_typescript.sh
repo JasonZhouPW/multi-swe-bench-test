@@ -280,6 +280,12 @@ elif [ -f yarn.lock ]; then
     echo "Yarn installed"
     yarn install || yarn || true
     echo "Yarn install done"
+elif [ -f package.json ] && grep -q '"test:unit"' package.json 2>/dev/null; then
+    echo "Using yarn (found test:unit script)"
+    npm install -g yarn || true
+    echo "Yarn installed"
+    yarn install || yarn || true
+    echo "Yarn install done"
 else
     echo "Using npm"
     npm ci --legacy-peer-deps || true
@@ -299,7 +305,7 @@ if [ -f "BUILD.bazel" ] || [ -d "bazel" ] || grep -q "bazelisk" package.json 2>/
 elif [ -f backend/poetry.lock ]; then
     export PATH="$HOME/.local/bin:$PATH"
     cd backend && (poetry run pytest || python3 -m poetry run pytest)
-elif [ -f yarn.lock ] || grep -q '"packageManager"' package.json 2>/dev/null && grep -q 'yarn' package.json 2>/dev/null; then
+elif [ -f yarn.lock ] || grep -q '"packageManager"' package.json 2>/dev/null && grep -q 'yarn' package.json 2>/dev/null || grep -q '"test:unit"' package.json 2>/dev/null; then
     CI=true yarn test:unit || CI=true yarn test:app || CI=true yarn test || CI=true yarn run test || true
 else
     npm test
@@ -324,7 +330,7 @@ if [ -f "BUILD.bazel" ] || [ -d "bazel" ] || grep -q "bazelisk" package.json 2>/
 elif [ -f backend/poetry.lock ]; then
     export PATH="$HOME/.local/bin:$PATH"
     cd backend && (poetry run pytest || python3 -m poetry run pytest)
-elif [ -f yarn.lock ] || grep -q '"packageManager"' package.json 2>/dev/null && grep -q 'yarn' package.json 2>/dev/null; then
+elif [ -f yarn.lock ] || grep -q '"packageManager"' package.json 2>/dev/null && grep -q 'yarn' package.json 2>/dev/null || grep -q '"test:unit"' package.json 2>/dev/null; then
     CI=true yarn test:unit || CI=true yarn test:app || CI=true yarn test || CI=true yarn run test || true
 else
     npm test
@@ -352,7 +358,7 @@ if [ -f "BUILD.bazel" ] || [ -d "bazel" ] || grep -q "bazelisk" package.json 2>/
 elif [ -f backend/poetry.lock ]; then
     export PATH="$HOME/.local/bin:$PATH"
     cd backend && (poetry run pytest || python3 -m poetry run pytest)
-elif [ -f yarn.lock ] || grep -q '"packageManager"' package.json 2>/dev/null && grep -q 'yarn' package.json 2>/dev/null; then
+elif [ -f yarn.lock ] || grep -q '"packageManager"' package.json 2>/dev/null && grep -q 'yarn' package.json 2>/dev/null || grep -q '"test:unit"' package.json 2>/dev/null; then
     CI=true yarn test:unit || CI=true yarn test:app || CI=true yarn test || CI=true yarn run test || true
 else
     npm test
@@ -410,6 +416,10 @@ class InstanceTemplate(Instance):
         failed_tests = set()
         skipped_tests = set()
         import re
+
+        # Strip ANSI escape codes from log (vitest uses colored output)
+        ansi_escape = re.compile(r'\x1b\[[0-9;]*m|\[[0-9;]*m')
+        log = ansi_escape.sub('', log)
 
         # Track test names - failed takes precedence over passed
         test_status = {}
