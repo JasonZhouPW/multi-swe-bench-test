@@ -15,6 +15,7 @@
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Optional, Tuple, Union
+import re
 
 from dataclasses_json import config, dataclass_json
 
@@ -46,6 +47,10 @@ class Report(PullRequestBase):
     _tests: dict[str, Test] = field(
         default_factory=dict, metadata=config(exclude=lambda _: True)
     )
+    # Store raw log content for error diagnosis
+    _run_log: str = field(default="", metadata=config(exclude=lambda _: True))
+    _test_patch_log: str = field(default="", metadata=config(exclude=lambda _: True))
+    _fix_patch_log: str = field(default="", metadata=config(exclude=lambda _: True))
 
     def __post_init__(self):
         if not self.run_result:
@@ -87,15 +92,86 @@ class Report(PullRequestBase):
     def json(self) -> str:
         return self.to_json(ensure_ascii=False)
 
+    def _extract_error_from_log(self, log: str) -> str:
+        """Extract meaningful error message from log content."""
+        if not log:
+            return "No log content available"
+
+        # Strip ANSI escape codes for cleaner output
+        ansi_escape = re.compile(r'\x1b\[[0-9;]*m|\[[0-9;]*m')
+        clean_log = ansi_escape.sub('', log)
+
+        # Define error patterns to search for (order matters - more specific first)
+        error_patterns = [
+            # npm/Node.js errors
+            (r"npm error.*?(?=\n|$)", "npm error"),
+            (r"node: bad option.*?(?=\n|$)", "Node.js bad option"),
+            (r"node: internal.*?(?=\n|$)", "Node.js internal error"),
+            (r"ENOENT.*?(?=\n|$)", "ENOENT (file not found)"),
+            # Python errors
+            (r"Traceback \(most recent call last\):.*?(?=\n\n|\Z)", "Python traceback"),
+            (r"ModuleNotFoundError.*?(?=\n|$)", "Module not found"),
+            (r"ImportError.*?(?=\n|$)", "Import error"),
+            # Git errors
+            (r"git (error|checkout|clone).*?(?=\n|$)", "Git error"),
+            # Package manager errors
+            (r"packageManager.*?(?=\n|$)", "Package manager configuration error"),
+            (r"corepack.*?(?=\n|$)", "Corepack error"),
+            # Docker/build errors
+            (r"Docker.*?(?=\n|$)", "Docker error"),
+            (r"bazel.*?(?=\n|$)", "Bazel error"),
+            # Exit code errors
+            (r"exited with exit code (\d+).*?(?=\n|$)", "Process exited with error"),
+            (r"exit code (\d+).*?(?=\n|$)", "Exit code error"),
+            # Compilation/syntax errors
+            (r"SyntaxError.*?(?=\n|$)", "Syntax error"),
+            (r"CompilationError.*?(?=\n|$)", "Compilation error"),
+            # Last resort - just get the error lines
+            (r"error.*?(?=\n|$)", "Generic error"),
+        ]
+
+        for pattern, error_type in error_patterns:
+            matches = re.findall(pattern, clean_log, re.MULTILINE | re.IGNORECASE | re.DOTALL)
+            if matches:
+                # Get the first meaningful match (skip common non-errors)
+                for match in matches[:3]:
+                    if match and len(str(match)) > 5 and "error" not in str(match).lower()[:20]:
+                        continue  # Skip non-error matches
+                    if match:
+                        # Truncate long matches
+                        error_text = str(match).strip()[:200]
+                        return f"[{error_type}] {error_text}"
+
+        # Try to get the last few lines that contain error indicators
+        lines = clean_log.split('\n')
+        error_lines = []
+        for line in lines[-20:]:
+            if any(x in line.lower() for x in ['error', 'failed', 'exception', 'traceback', 'npm error']):
+                error_lines.append(line.strip())
+
+        if error_lines:
+            # Dedupe and limit
+            seen = set()
+            unique_lines = []
+            for line in error_lines:
+                if line not in seen and len(line) > 5:
+                    seen.add(line)
+                    unique_lines.append(line)
+            return " | ".join(unique_lines[:2])
+
+        return "Unknown error - no recognizable error pattern found"
+
     def check(self, force: bool = False) -> Tuple[bool, str]:
         if not force and self.valid is not None:
             return (self.valid, self.error_msg)
 
-        # 1. Check if pytest collection failed (INTERNALERROR or argparse errors)
+        # 1. Check if test collection failed (all counts are zero)
         # This indicates the test command failed to even run properly
         if self.fix_patch_result.passed_count == 0 and self.fix_patch_result.failed_count == 0 and self.fix_patch_result.skipped_count == 0:
             self.valid = False
-            self.error_msg = f"Test execution failed: pytest collected no valid tests. This may be due to collection errors or incorrect test configuration."
+            # Extract real error from the fix_patch_log (most informative)
+            real_error = self._extract_error_from_log(self._fix_patch_log)
+            self.error_msg = f"Test execution failed (0 tests collected). Real error: {real_error}"
             return (self.valid, self.error_msg)
 
         # 2. No new failures
@@ -155,6 +231,9 @@ def generate_report(
     run_result: Union[str, TestResult],
     test_patch_result: Union[str, TestResult],
     fix_patch_result: Union[str, TestResult],
+    run_log: str = "",
+    test_patch_log: str = "",
+    fix_patch_log: str = "",
 ) -> Report:
     if isinstance(run_result, str):
         run_result = instance.parse_log(run_result)
@@ -170,6 +249,9 @@ def generate_report(
         run_result=run_result,
         test_patch_result=test_patch_result,
         fix_patch_result=fix_patch_result,
+        _run_log=run_log,
+        _test_patch_log=test_patch_log,
+        _fix_patch_log=fix_patch_log,
     )
 
     return report
@@ -248,11 +330,19 @@ class ReportTask(PullRequestBase):
                     report = Report.from_json(f.read())
                 return report
 
+        # Get raw logs for error extraction
+        raw_run_log = self.run_log if run_log is None else str(run_log or "")
+        raw_test_patch_log = self.test_patch_run_log if test_patch_run_log is None else str(test_patch_run_log or "")
+        raw_fix_patch_log = self.fix_patch_run_log if fix_patch_run_log is None else str(fix_patch_run_log or "")
+
         report = generate_report(
             self.instance,
             run_log or self.run_log,
             test_patch_run_log or self.test_patch_run_log,
             fix_patch_run_log or self.fix_patch_run_log,
+            run_log=raw_run_log,
+            test_patch_log=raw_test_patch_log,
+            fix_patch_log=raw_fix_patch_log,
         )
 
         with open(self.instance_dir / REPORT_FILE, "w", encoding="utf-8") as f:

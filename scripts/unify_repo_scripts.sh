@@ -150,14 +150,11 @@ for RAW_FILE in "${FILES[@]}"; do
     echo "🚀 Finally: Building dataset..."
     echo "========================================="
 
-    # ---- Safe derive BASE_NAME ----
-    if [ -z "${BASE_NAME-}" ]; then
-        RAW_BASENAME=$(basename "$RAW_FILE")
-        BASE_NAME="${RAW_BASENAME%%_raw_dataset.jsonl}"
-    fi
-    # --------------------------------
+    # Derive BASE_NAME fresh for each file
+    RAW_BASENAME=$(basename "$RAW_FILE")
+    BASE_NAME="${RAW_BASENAME%%_raw_dataset.jsonl}"
 
-    "$SCRIPT_DIR/../data_pipeline/build_dataset.sh" "$RAW_FILE" || true 
+    "$SCRIPT_DIR/../data_pipeline/build_dataset.sh" "$RAW_FILE" || true
 
     ##########################################
     # Derive dataset filename (multiple entries merged in one file)
@@ -174,10 +171,12 @@ for RAW_FILE in "${FILES[@]}"; do
 
 
     echo "Remove all docker images"
-    # 1. Stop all docker containers
-    docker container stop $(docker ps -aq) || true
-    # 2. Remove all docker containers
-    docker container rm $(docker ps -aq) || true
+    # 1. Stop all docker containers (exclude redis and postgres)
+    EXCLUDE_CIDS=$(docker ps -q --filter "name=redis" --filter "name=postgres" 2>/dev/null | paste -sd '|' -)
+    [ -n "$EXCLUDE_CIDS" ] && docker container stop $(docker ps -aq | grep -vE "^(${EXCLUDE_CIDS})$") || true
+    # 2. Remove all docker containers (exclude redis and postgres)
+    EXCLUDE_CIDS=$(docker ps -q --filter "name=redis" --filter "name=postgres" 2>/dev/null | paste -sd '|' -)
+    [ -n "$EXCLUDE_CIDS" ] && docker container rm $(docker ps -aq | grep -vE "^(${EXCLUDE_CIDS})$") || true
     # 3. Remove all docker images (exclude mswebench/nix_swe, redis, and postgres/postgis images)
     docker rmi $( docker images --format "table {{.Repository}}\t{{.ID}}" | grep -v "mswebench/nix_swe" | grep -v "^redis" | grep -v "^postgres" | grep -v "^postgis" | awk '{print $2}') || true
 done

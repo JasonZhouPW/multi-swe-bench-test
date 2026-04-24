@@ -166,21 +166,27 @@ class ImageBase(Image):
                         version = match.group(1)
                         if version.startswith("1."):
                             version = version[2:]
-                        return version
-                    # also check javaVersion
+                        # Validate it looks like a version number (starts with digit)
+                        if version and version[0].isdigit():
+                            return version
+                    # also check javaVersion - but only if it looks like a simple version (e.g., "17", "11", "21")
                     match = re.search(r'javaVersion\s*=\s*[\'"]([^\'"]+)[\'"]', content)
                     if match:
                         version = match.group(1)
                         if version.startswith("1."):
                             version = version[2:]
-                        return version
+                        # Validate it looks like a version number (starts with digit, mostly digits and dots)
+                        if version and version[0].isdigit() and re.match(r'^[\d\.]+$', version):
+                            return version
                     # check jvmTarget for Kotlin
                     match = re.search(r'jvmTarget\s*=\s*[\'"]([^\'"]+)[\'"]', content)
                     if match:
                         version = match.group(1)
                         if version.startswith("1."):
                             version = version[2:]
-                        return version
+                        # Validate it looks like a version number
+                        if version and version[0].isdigit() and re.match(r'^[\d\.]+$', version):
+                            return version
                     # check languageVersion for Gradle toolchain
                     match = re.search(r'languageVersion\s*=\s*JavaLanguageVersion\.of\((\d+)\)', content)
                     if match:
@@ -218,8 +224,10 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV LANG=C.UTF-8
 ENV LC_ALL=C.UTF-8
 WORKDIR /home/
-RUN apt-get update && apt-get install -y git openjdk-{java_version}-jdk
+RUN apt-get update && apt-get install -y git curl openjdk-{java_version}-jdk
 RUN apt-get install -y maven
+# Install Bazelisk for ARM64
+RUN curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.19.0/bazelisk-linux-arm64 -o /usr/local/bin/bazel && chmod +x /usr/local/bin/bazel
 {code}
 
 {self.clear_env}
@@ -272,21 +280,27 @@ class ImageDefault(Image):
                         version = match.group(1)
                         if version.startswith("1."):
                             version = version[2:]
-                        return version
-                    # also check javaVersion
+                        # Validate it looks like a version number (starts with digit)
+                        if version and version[0].isdigit():
+                            return version
+                    # also check javaVersion - but only if it looks like a simple version (e.g., "17", "11", "21")
                     match = re.search(r'javaVersion\s*=\s*[\'"]([^\'"]+)[\'"]', content)
                     if match:
                         version = match.group(1)
                         if version.startswith("1."):
                             version = version[2:]
-                        return version
+                        # Validate it looks like a version number (starts with digit, mostly digits and dots)
+                        if version and version[0].isdigit() and re.match(r'^[\d\.]+$', version):
+                            return version
                     # check jvmTarget for Kotlin
                     match = re.search(r'jvmTarget\s*=\s*[\'"]([^\'"]+)[\'"]', content)
                     if match:
                         version = match.group(1)
                         if version.startswith("1."):
                             version = version[2:]
-                        return version
+                        # Validate it looks like a version number
+                        if version and version[0].isdigit() and re.match(r'^[\d\.]+$', version):
+                            return version
                     # check languageVersion for Gradle toolchain
                     match = re.search(r'languageVersion\s*=\s*JavaLanguageVersion\.of\((\d+)\)', content)
                     if match:
@@ -349,10 +363,15 @@ bash /home/check_git_changes.sh
 # Injected setup commands
 __SETUP_COMMANDS_BLOCK__
 
-# Check if Maven pom.xml exists, otherwise use Gradle
-if [ -f "pom.xml" ]; then
+# Detect build system: Bazel > Maven > Gradle
+if [ -f "MODULE.bazel" ] || [ -f "BUILD.bazel" ]; then
+    echo "Using Bazel build system"
+    bazel test //... --test_output=errors || true
+elif [ -f "pom.xml" ]; then
+    echo "Using Maven build system"
     mvn clean test -Dmaven.test.skip=false -DfailIfNoTests=false --batch-mode || true
 else
+    echo "Using Gradle build system"
     ./gradlew test --info --continue || true
 fi
 """.format(pr=self.pr),
@@ -364,9 +383,15 @@ fi
 set -e
 
 cd /home/{pr.repo}
-if [ -f "pom.xml" ]; then
+# Detect build system: Bazel > Maven > Gradle
+if [ -f "MODULE.bazel" ] || [ -f "BUILD.bazel" ]; then
+    echo "Using Bazel build system"
+    bazel test //... --test_output=errors
+elif [ -f "pom.xml" ]; then
+    echo "Using Maven build system"
     mvn clean test -Dmaven.test.skip=false -DfailIfNoTests=false --batch-mode
 else
+    echo "Using Gradle build system"
     ./gradlew test --info
 fi
 """.format(pr=self.pr),
@@ -388,9 +413,15 @@ if [ -s /home/test.patch ]; then
 else
     echo "No test.patch to apply (empty or missing)"
 fi
-if [ -f "pom.xml" ]; then
+# Detect build system: Bazel > Maven > Gradle
+if [ -f "MODULE.bazel" ] || [ -f "BUILD.bazel" ]; then
+    echo "Using Bazel build system"
+    bazel test //... --test_output=errors
+elif [ -f "pom.xml" ]; then
+    echo "Using Maven build system"
     mvn clean test -Dmaven.test.skip=false -DfailIfNoTests=false --batch-mode
 else
+    echo "Using Gradle build system"
     ./gradlew test --info
 fi
 
@@ -410,9 +441,15 @@ else
     # No test.patch, only apply fix.patch
     git apply --whitespace=nowarn /home/fix.patch
 fi
-if [ -f "pom.xml" ]; then
+# Detect build system: Bazel > Maven > Gradle
+if [ -f "MODULE.bazel" ] || [ -f "BUILD.bazel" ]; then
+    echo "Using Bazel build system"
+    bazel test //... --test_output=errors
+elif [ -f "pom.xml" ]; then
+    echo "Using Maven build system"
     mvn clean test -Dmaven.test.skip=false -DfailIfNoTests=false --batch-mode
 else
+    echo "Using Gradle build system"
     ./gradlew test --info
 fi
 
@@ -516,6 +553,20 @@ class InstanceTemplate(Instance):
                         failed_tests.add(test_name)
                     elif skipped == tests_run:
                         skipped_tests.add(test_name)
+
+            # Try Bazel format as fallback
+            # Bazel outputs: "//path/to:target PASSED" or "//path/to:target FAILED"
+            bazel_pattern = _re.compile(r'^//(.+?)\s+(PASSED|FAILED|SKIPPED)$', _re.MULTILINE)
+            for match in bazel_pattern.findall(clean_log):
+                target, status = match
+                # Convert Bazel target to test name format: path/to:target
+                test_name = target.replace(':', '.')
+                if status == "PASSED":
+                    passed_tests.add(test_name)
+                elif status == "FAILED":
+                    failed_tests.add(test_name)
+                elif status == "SKIPPED":
+                    skipped_tests.add(test_name)
 
         return TestResult(
             passed_count=len(passed_tests),

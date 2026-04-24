@@ -146,6 +146,15 @@ class ImageBase(Image):
         else:
             code = f"COPY {self.pr.repo} /home/{self.pr.repo}"
 
+        # Install system dependencies for bevy (wayland-sys crate requires libwayland-dev)
+        system_deps = """RUN apt-get update && apt-get install -y \\
+    libwayland-dev \\
+    libxkbcommon-dev \\
+    libudev-dev \\
+    libasound2-dev \\
+    pkg-config \\
+    && rm -rf /var/lib/apt/lists/*"""
+
         return f"""FROM {image_name}
 
 {self.global_env}
@@ -153,6 +162,8 @@ class ImageBase(Image):
 WORKDIR /home/
 
 {code}
+
+{system_deps}
 
 {self.clear_env}
 
@@ -233,7 +244,7 @@ bash /home/check_git_changes.sh
 # Injected setup commands
 __SETUP_COMMANDS_BLOCK__
 
-cargo test || true
+cargo test --lib || true
 
 """.format(pr=self.pr),
             ),
@@ -244,7 +255,7 @@ cargo test || true
 set -e
 
 cd /home/{pr.repo}
-cargo test
+cargo test --lib
 
 """.format(pr=self.pr),
             ),
@@ -261,7 +272,7 @@ if [ -s /home/test.patch ]; then
 else
     echo "No test.patch to apply (empty or missing)"
 fi
-cargo test
+cargo test --lib
 
 """.format(pr=self.pr),
             ),
@@ -279,7 +290,7 @@ else
     # No test.patch, only apply fix.patch
     git apply /home/fix.patch
 fi
-cargo test
+cargo test --lib
 
 """.format(pr=self.pr),
             ),

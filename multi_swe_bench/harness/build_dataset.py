@@ -1022,8 +1022,11 @@ if __name__ == "__main__":
         client = docker.from_env()
         try:
             container = client.containers.get("nix_swe")
+            if container.status != "running":
+                container.remove()
+                raise docker.errors.NotFound("Container not running")
         except docker.errors.NotFound:
-            client.containers.run("mswebench/nix_swe:v1.0", "true", name="nix_swe")
+            client.containers.run("mswebench/nix_swe:v1.0", "sleep infinity", detach=True, name="nix_swe", remove=True)
     except Exception as e:
         print(f"Error starting nix_swe container: {e}")
         sys.exit(1)

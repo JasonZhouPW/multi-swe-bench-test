@@ -198,13 +198,69 @@
 
 ### Step 7 - 训练数据提取（用于模型微调）
 
-**目的**：将处理好的数据集转换为 LLM 训练格式（JSON）
+**目的**：将 `data/datasets` 下的数据集转换为 LLM 微调格式（SFT/Completion/DPO）
 
-**脚本**：`./scripts/extract_training_data.sh <input_path> <output_file>`
+**脚本**：`python scripts/gen_training_data_from_datasets.py [options]`
 
-**功能**：支持处理单个文件或整个目录，自动合并并进行双向转换（PR->Patch, Patch->PR）。
+**功能**：
+- 支持三种格式：SFT（对话）、Completion（前缀补全）、DPO（偏好对齐）
+- 自动过滤无效记录（body太短、patch太短、无diff）
+- 去除重复记录
+- 清理 HTML 注释和模板噪声
+- 修复 patch 中的字面 `\n` 为真正换行符
+- 支持合并所有项目到单一文件
 
-**输出**：格式化的 JSON 文件，适合 LLM 微调
+**输出**：
+- 按项目分目录：`training_data/{repo_name}/train_sft.jsonl`
+- 合并文件（加 `--merge`）：`training_data/train_sft.jsonl`、`train_completion.jsonl`、`train_dpo.jsonl`
+
+**示例**：
+```bash
+# 生成所有格式并合并到单一文件
+python scripts/gen_training_data_from_datasets.py --merge
+
+# 只生成 SFT 格式
+python scripts/gen_training_data_from_datasets.py --formats sft
+
+# 处理特定项目
+python scripts/gen_training_data_from_datasets.py --filter gohugoio__hugo kubernetes__kubernetes
+
+# 重新生成（不跳过已存在的文件）
+python scripts/gen_training_data_from_datasets.py --no-skip --merge
+```
+
+**格式说明**：
+| 格式 | 字段 | 用途 |
+|------|------|------|
+| SFT | `messages` | 对话格式，适合 Chat 模型 |
+| Completion | `prompt` + `completion` | 前缀补全，适合代码模型 |
+| DPO | `prompt` + `chosen` + `rejected` | 偏好对齐，适合 RLHF 训练 |
+
+---
+
+### Step 7.1 - 从 Raw Dataset 生成训练数据（未处理的数据）
+
+**目的**：直接从 `new_filtered_raw_datasets/<lang>/` 目录下的未处理原始数据生成微调数据
+
+**脚本**：`python scripts/gen_training_data_from_raw.py [options]`
+
+**功能**：与 Step 7 类似，但直接从原始 raw dataset 生成（无需先经过 Step 3 处理）
+
+**输出**：
+- 按项目分目录：`training_data_from_raw/{repo_name}/train_sft_from_raw.jsonl`
+- 合并文件：`training_data_from_raw/train_sft_from_raw.jsonl` 等
+
+**示例**：
+```bash
+# 处理所有语言，生成所有格式并合并
+python scripts/gen_training_data_from_raw.py --merge
+
+# 只处理 Go 语言
+python scripts/gen_training_data_from_raw.py --lang Go --merge
+
+# 指定输出目录
+python scripts/gen_training_data_from_raw.py --output-dir ./my_raw_training_data
+```
 
 ---
 
@@ -302,7 +358,20 @@ wait
 
 ### Step 7: Training Data
 ```bash
-./scripts/extract_training_data.sh data/datasets output.json
+# 生成并合并所有格式（从已处理的 datasets）
+python scripts/gen_training_data_from_datasets.py --merge
+
+# 只生成特定格式
+python scripts/gen_training_data_from_datasets.py --formats sft dpo
+
+# 处理特定项目
+python scripts/gen_training_data_from_datasets.py --filter gohugoio__hugo
+
+# 从原始 raw dataset 生成（无需 Step 3 处理）
+python scripts/gen_training_data_from_raw.py --merge
+
+# 只处理特定语言
+python scripts/gen_training_data_from_raw.py --lang Go --merge
 ```
 
 ---
@@ -456,7 +525,7 @@ curl -H "Authorization: token YOUR_TOKEN" https://api.github.com/rate_limit
 
 ## 总结 📝
 
-完整流程共7 步：
+完整流程共 8 步：
 1. Fetch PRs from GitHub (Step 1)
 2. Filter & Refine Data (Step 1.1, 可选)
 3. Merge JSONL by Category (Step 2, 新增)
@@ -464,7 +533,7 @@ curl -H "Authorization: token YOUR_TOKEN" https://api.github.com/rate_limit
 5. Generate Patches (Step 4)
 6. Patch Quality Check (Step 5, 可选)
 7. Run Evaluation (Step 6)
-8. Extract Training Data (Step 7, 可选)
+8. Extract Training Data (Step 7, 可选，支持 SFT/Completion/DPO 三种格式)
 
 每个脚本都有详细的错误处理和进度提示，遇到问题时会给出明确的错误信息和建议的解决方法。
 

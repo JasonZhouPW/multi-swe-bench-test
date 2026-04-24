@@ -95,6 +95,13 @@ CLASS_NAME=$(echo "$REPO_PY" | sed -E 's/(^|_)([a-z])/\U\2/g')
 repo_name="$REPO"
 pr_base_sha="$BASE_SHA"
 
+# Special handling for immich - tests are in server/ subdirectory
+TEST_CD=""
+if [ "$REPO" = "immich" ]; then
+    TEST_CD="cd server"
+    echo "📁 Immich detected: tests in server/ subdirectory"
+fi
+
 ###################################################
 # Create folder
 ###################################################
@@ -236,6 +243,34 @@ echo "Git checkout done"
 bash /home/check_git_changes.sh
 echo "Second git check done"
 
+# Install correct Node version based on engines.node
+echo "Checking Node.js version requirement..."
+if [ -f package.json ]; then
+    NODE_VERSION=$(grep -oP '"node":\s*"\K[^"]+' package.json 2>/dev/null | head -1 || echo "")
+    if [ -n "$NODE_VERSION" ]; then
+        echo "Found Node version requirement: $NODE_VERSION"
+        # Extract major version number (first digit sequence), default to 20
+        NODE_MAJOR=$(echo "$NODE_VERSION" | grep -oE '^[0-9]+' || echo "20")
+        CURRENT_NODE=$(node -v 2>/dev/null | sed 's/v//' | cut -d. -f1)
+        if [ -n "$NODE_MAJOR" ] && [ "$NODE_MAJOR" != "$CURRENT_NODE" ]; then
+            echo "Installing Node.js v{NODE_MAJOR} (current: v{CURRENT_NODE})..."
+            # Download and install the required Node version
+            # Use the LTS version URL format: vMAJOR.0.0
+            curl -fsSL "https://nodejs.org/dist/v{NODE_MAJOR}.0.0/node-v{NODE_MAJOR}.0.0-linux-x64.tar.xz" -o /tmp/node.tar.xz
+            if [ -f /tmp/node.tar.xz ]; then
+                tar -xJf /tmp/node.tar.xz -C /usr/local --strip-components=1
+                rm -f /tmp/node.tar.xz
+                echo "Node version: $(node -v)"
+                echo "NPM version: $(npm -v)"
+            else
+                echo "Failed to download Node.js v{NODE_MAJOR}.0.0"
+            fi
+        else
+            echo "Node version \${NODE_MAJOR} already installed or not detected, using current: $(node -v)"
+        fi
+    fi
+fi
+
 # Injected setup commands
 # Check for Python backend with poetry
 if [ -f backend/poetry.lock ]; then
@@ -257,6 +292,25 @@ if [ -f "BUILD.bazel" ] || [ -d "bazel" ] || grep -q "bazelisk" package.json 2>/
     chmod +x /usr/local/bin/bazelisk
     ln -sf /usr/local/bin/bazelisk /usr/local/bin/bazel
     echo "Bazelisk installed"
+fi
+
+# Check for playwright monorepo (needs special build for @playwright/experimental-ct-core)
+if [ -d "packages/playwright" ] || [ -d "packages/experimental-ct-core" ] || grep -q '"@playwright/test"' package.json 2>/dev/null; then
+    echo "Detected playwright monorepo - building packages..."
+    # Install dependencies first
+    yarn install || npm install || true
+    echo "Dependencies installed"
+    # Build the monorepo packages that are needed for testing
+    if [ -f "package.json" ] && grep -q '"build"' package.json; then
+        yarn build || npm run build || true
+        echo "Playwright monorepo build done"
+    fi
+    # Specifically ensure @playwright/experimental-ct-core is available
+    if [ -d "packages/experimental-ct-core" ]; then
+        cd packages/experimental-ct-core && npm install && npm run build || yarn install && yarn build || true
+        cd ../..
+        echo "experimental-ct-core built"
+    fi
 fi
 
 
@@ -292,21 +346,29 @@ else
     echo "Npm ci done"
 fi
 echo "Prepare.sh completed successfully"
-""".format(pr=self.pr),
+""".format(pr=self.pr, NODE_MAJOR="${NODE_MAJOR}", CURRENT_NODE="${CURRENT_NODE}"),
             ),
             File(
                 ".",
                 "run.sh",
                 """#!/bin/bash
+# Ensure correct Node.js version is in PATH
+export PATH="/usr/local/bin:$PATH"
+
 cd /home/[[REPO_NAME]]
+[[TEST_CD]]
 # Angular uses bazel for testing
 if [ -f "BUILD.bazel" ] || [ -d "bazel" ] || grep -q "bazelisk" package.json 2>/dev/null; then
     bazelisk test //packages/... //tools/... //modules/... 2>&1 || true
+fi
+# Check for Node.js test commands first (yarn/pnpm/npm take priority over Python backend tests)
+if [ -f yarn.lock ] || grep -q '"packageManager"' package.json 2>/dev/null && grep -q 'yarn' package.json 2>/dev/null || grep -q '"test:unit"' package.json 2>/dev/null; then
+    CI=true yarn test:unit || CI=true yarn test:app || CI=true yarn test || CI=true yarn run test || true
+elif [ -f pnpm-lock.yaml ]; then
+    npx pnpm test || true
 elif [ -f backend/poetry.lock ]; then
     export PATH="$HOME/.local/bin:$PATH"
     cd backend && (poetry run pytest || python3 -m poetry run pytest)
-elif [ -f yarn.lock ] || grep -q '"packageManager"' package.json 2>/dev/null && grep -q 'yarn' package.json 2>/dev/null || grep -q '"test:unit"' package.json 2>/dev/null; then
-    CI=true yarn test:unit || CI=true yarn test:app || CI=true yarn test || CI=true yarn run test || true
 else
     npm test
 fi
@@ -317,26 +379,38 @@ fi
                 ".",
                 "test-run.sh",
                 """#!/bin/bash
+# Ensure correct Node.js version is in PATH
+export PATH="/usr/local/bin:$PATH"
+
 cd /home/[[REPO_NAME]]
+[[TEST_CD]]
 # Apply test.patch only if it exists and is not empty
 if [ -s /home/test.patch ]; then
     git apply --exclude package.json --whitespace=nowarn /home/test.patch || echo "Warning: git apply test.patch failed"
 else
     echo "No test.patch to apply (empty or missing)"
 fi
+
+# Note: Node version installation skipped - using pre-installed Node
+echo "Using pre-installed Node.js: $(node -v 2>/dev/null || echo 'not found')"
+
 # Angular uses bazel for testing
 if [ -f "BUILD.bazel" ] || [ -d "bazel" ] || grep -q "bazelisk" package.json 2>/dev/null; then
     bazelisk test //packages/... //tools/... //modules/... 2>&1 || true
+fi
+# Check for Node.js test commands first (yarn/pnpm/npm take priority over Python backend tests)
+if [ -f yarn.lock ] || grep -q '"packageManager"' package.json 2>/dev/null && grep -q 'yarn' package.json 2>/dev/null || grep -q '"test:unit"' package.json 2>/dev/null; then
+    CI=true yarn test:unit || CI=true yarn test:app || CI=true yarn test || CI=true yarn run test || true
+elif [ -f pnpm-lock.yaml ]; then
+    npx pnpm test || true
 elif [ -f backend/poetry.lock ]; then
     export PATH="$HOME/.local/bin:$PATH"
     cd backend && (poetry run pytest || python3 -m poetry run pytest)
-elif [ -f yarn.lock ] || grep -q '"packageManager"' package.json 2>/dev/null && grep -q 'yarn' package.json 2>/dev/null || grep -q '"test:unit"' package.json 2>/dev/null; then
-    CI=true yarn test:unit || CI=true yarn test:app || CI=true yarn test || CI=true yarn run test || true
 else
     npm test
 fi
 
-""",
+""".format(pr=self.pr, NODE_MAJOR="${NODE_MAJOR}", CURRENT_NODE="${CURRENT_NODE}"),
             ),
             File(
                 ".",
@@ -344,7 +418,11 @@ fi
                 """#!/bin/bash
 set -e
 
+# Ensure correct Node.js version is in PATH
+export PATH="/usr/local/bin:$PATH"
+
 cd /home/[[REPO_NAME]]
+[[TEST_CD]]
 # Apply patches: test.patch (if exists) and fix.patch
 if [ -s /home/test.patch ]; then
     git apply --exclude package.json --whitespace=nowarn /home/test.patch /home/fix.patch || git apply --exclude package.json --whitespace=nowarn /home/fix.patch
@@ -352,19 +430,27 @@ else
     # No test.patch, only apply fix.patch
     git apply --exclude package.json --whitespace=nowarn /home/fix.patch
 fi
+
+# Note: Node version installation skipped - using pre-installed Node
+echo "Using pre-installed Node.js: $(node -v 2>/dev/null || echo 'not found')"
+
 # Angular uses bazel for testing
 if [ -f "BUILD.bazel" ] || [ -d "bazel" ] || grep -q "bazelisk" package.json 2>/dev/null; then
     bazelisk test //packages/... //tools/... //modules/... 2>&1 || true
+fi
+# Check for Node.js test commands first (yarn/pnpm/npm take priority over Python backend tests)
+if [ -f yarn.lock ] || grep -q '"packageManager"' package.json 2>/dev/null && grep -q 'yarn' package.json 2>/dev/null || grep -q '"test:unit"' package.json 2>/dev/null; then
+    CI=true yarn test:unit || CI=true yarn test:app || CI=true yarn test || CI=true yarn run test || true
+elif [ -f pnpm-lock.yaml ]; then
+    npx pnpm test || true
 elif [ -f backend/poetry.lock ]; then
     export PATH="$HOME/.local/bin:$PATH"
     cd backend && (poetry run pytest || python3 -m poetry run pytest)
-elif [ -f yarn.lock ] || grep -q '"packageManager"' package.json 2>/dev/null && grep -q 'yarn' package.json 2>/dev/null || grep -q '"test:unit"' package.json 2>/dev/null; then
-    CI=true yarn test:unit || CI=true yarn test:app || CI=true yarn test || CI=true yarn run test || true
 else
     npm test
 fi
 
-""",
+""".format(pr=self.pr, NODE_MAJOR="${NODE_MAJOR}", CURRENT_NODE="${CURRENT_NODE}"),
             ),
         ]
 
@@ -564,6 +650,7 @@ echo "✅ Injected setup commands from $EXTRA_JSON"
 sed -i "" "s/{{ORG}}/$ORG/g"  "$TARGET_FILE" 2>/dev/null || sed -i "s/{{ORG}}/$ORG/g" "$TARGET_FILE"
 sed -i "" "s/{{REPO}}/$REPO/g" "$TARGET_FILE" 2>/dev/null || sed -i "s/{{REPO}}/$REPO/g" "$TARGET_FILE"
 sed -i "" "s/\[\[REPO_NAME\]\]/$repo_name/g" "$TARGET_FILE" 2>/dev/null || sed -i "s/\[\[REPO_NAME\]\]/$repo_name/g" "$TARGET_FILE"
+sed -i "" "s/\[\[TEST_CD\]\]/$(echo "$TEST_CD" | sed 's/\//\\\//g')/g" "$TARGET_FILE" 2>/dev/null || sed -i "s/\[\[TEST_CD\]\]/$(echo "$TEST_CD" | sed 's/\//\\\//g')/g" "$TARGET_FILE"
 
 rm -f "$TARGET_FILE.bak"
 

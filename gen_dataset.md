@@ -52,3 +52,6 @@ python3 -m multi_swe_bench.collect.get_from_repos_pipeline \
 echo "All done!"
 
 ```
+
+
+  curl -X POST "https://proxyai.ont.io/v1/chat/completions" \  -H "Content-Type: application/json" \ -H "Authorization: Bearer sk-504ff5376007edcd95760779971f0367ce4724793ff45034e1d2941829777532" \ -d '{"model":"glm-5","messages":[{"role":"user","content":"hello"}],"max_tokens":50}'
