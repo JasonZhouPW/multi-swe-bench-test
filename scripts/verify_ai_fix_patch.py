@@ -96,7 +96,7 @@ def get_image_name(dataset: dict) -> str:
     org = dataset.get("org", "").lower().replace("/", "_")
     repo = dataset.get("repo", "").lower().replace("/", "_")
     pr_number = dataset.get("number", 0)
-    return f"envagent/{org}_m_{repo}:pr-{pr_number}"
+    return f"mswebench/{org}_m_{repo}:pr-{pr_number}"
 
 
 def run_docker_command(
@@ -136,7 +136,10 @@ def run_test_in_docker(
     image_name: str,
     instance_dir: str,
     output_dir: str,
+    test_patch_path: str,
+    fix_patch_path: str,
     stage: str = "run",
+    run_prepare: bool = False,
 ) -> str:
     """
     Run test stage in Docker.
@@ -161,13 +164,27 @@ def run_test_in_docker(
     if not os.path.exists(script_path):
         return f"Error: Script not found: {script_path}"
 
-    # Run the script in Docker
+    # Run the script in Docker. Mount scripts individually under /home so the
+    # repository directory baked into the base image remains visible.
     volumes = {
-        instance_dir: "/home/scripts",
         output_dir: "/home/output",
+        test_patch_path: "/home/test.patch",
+        fix_patch_path: "/home/fix.patch",
     }
+    for name in [
+        "run.sh",
+        "test-run.sh",
+        "fix-run.sh",
+        "prepare.sh",
+        "check_git_changes.sh",
+        "resolve_go_file.sh",
+    ]:
+        host_path = os.path.join(instance_dir, name)
+        if os.path.exists(host_path):
+            volumes[host_path] = f"/home/{name}"
 
-    command = f"cd /home/scripts && bash {script} 2>&1 | tee /home/output/{stage}-run.log"
+    prepare_cmd = "bash /home/prepare.sh && " if run_prepare and os.path.exists(os.path.join(instance_dir, "prepare.sh")) else ""
+    command = f"cd /home && {prepare_cmd}bash /home/{script} 2>&1 | tee /home/output/{stage}-run.log"
 
     print(f"🔧 Running stage '{stage}' in Docker...")
     output = run_docker_command(image_name, command, volumes)
@@ -353,6 +370,11 @@ def main():
         default=None,
         help="Path to test-patch file (overrides test_patch in dataset JSON)"
     )
+    parser.add_argument(
+        "--run-prepare",
+        action="store_true",
+        help="Run prepare.sh before each test stage. Useful when verifying against a base image instead of a PR image."
+    )
 
     args = parser.parse_args()
 
@@ -366,6 +388,8 @@ def main():
         print(f"Fix Patch:  {args.fix_patch} (external file)")
     if args.test_patch:
         print(f"Test Patch: {args.test_patch} (external file)")
+    if args.run_prepare:
+        print("Run Prepare: enabled")
     print("=" * 60 + "\n")
 
     # Load dataset
@@ -429,21 +453,27 @@ def main():
     print("=" * 60)
 
     print("\n1️⃣  Running base test (no patches)...")
-    run_log = run_test_in_docker(image_name, instance_dir, args.output_dir, "run")
+    run_log = run_test_in_docker(
+        image_name, instance_dir, args.output_dir, test_patch_path, fix_patch_path, "run", args.run_prepare
+    )
     with open(os.path.join(args.output_dir, "run.log"), "w") as f:
         f.write(run_log)
     run_result = parse_test_log(run_log)
     print(f"   Result: {run_result['passed']} passed, {run_result['failed']} failed, {run_result['skipped']} skipped")
 
     print("\n2️⃣  Running test with test patch...")
-    test_log = run_test_in_docker(image_name, instance_dir, args.output_dir, "test")
+    test_log = run_test_in_docker(
+        image_name, instance_dir, args.output_dir, test_patch_path, fix_patch_path, "test", args.run_prepare
+    )
     with open(os.path.join(args.output_dir, "test-patch-run.log"), "w") as f:
         f.write(test_log)
     test_result = parse_test_log(test_log)
     print(f"   Result: {test_result['passed']} passed, {test_result['failed']} failed, {test_result['skipped']} skipped")
 
     print("\n3️⃣  Running test with fix patch...")
-    fix_log = run_test_in_docker(image_name, instance_dir, args.output_dir, "fix")
+    fix_log = run_test_in_docker(
+        image_name, instance_dir, args.output_dir, test_patch_path, fix_patch_path, "fix", args.run_prepare
+    )
     with open(os.path.join(args.output_dir, "fix-patch-run.log"), "w") as f:
         f.write(fix_log)
     fix_result = parse_test_log(fix_log)
